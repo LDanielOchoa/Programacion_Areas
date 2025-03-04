@@ -111,13 +111,14 @@ app.post('/api/validate-employees', async (req, res) => {
 
       // Consulta optimizada
       const query = `
-          SELECT 
-              LTRIM(RTRIM(REPLACE(F200_ID, CHAR(160), '')) AS F200_ID
-          FROM BI_W0550
-          WHERE C0550_ID_CIA = '4'
-              AND T19_C0006_DESCRIPCION = 'Activo'
-              AND LTRIM(RTRIM(REPLACE(F200_ID, CHAR(160), ''))) IN (${parameters})
-          OPTION (MAXDOP 1, RECOMPILE)`;
+        SELECT 
+            LTRIM(RTRIM(REPLACE(F200_ID, CHAR(160), ''))) AS F200_ID
+        FROM BI_W0550
+        WHERE C0550_ID_CIA = '4'
+            AND T19_C0006_DESCRIPCION = 'Activo'
+            AND LTRIM(RTRIM(REPLACE(F200_ID, CHAR(160), ''))) IN (${parameters})
+        OPTION (MAXDOP 1, RECOMPILE)
+      `;
       
       console.log('[INFO] Ejecutando consulta SQL:', query.replace(/\s+/g, ' '));
 
