@@ -312,160 +312,186 @@ app.post('/api/check-dates', async (req, res) => {
   }
 });
 
-// Save schedule data to database
+// En el endpoint /api/save-schedule
 app.post('/api/save-schedule', async (req, res) => {
-  const { records } = req.body;
-  console.log('[INFO] Petición recibida en /api/save-schedule');
+  const currentYear = new Date().getFullYear();
   
-  if (!records || !Array.isArray(records) || records.length === 0) {
-    console.log('[ERROR] No se proporcionaron registros válidos');
-    return res.status(400).json({ error: 'No valid records provided' });
+  const invalidYearRecords = req.body.records.filter(record => {
+    const recordYear = new Date(record.Fecha_programacion).getFullYear();
+    return recordYear !== currentYear;
+  });
+
+  if (invalidYearRecords.length > 0) {
+    return res.status(400).json({
+      error: `Fechas fuera del año actual (${currentYear})`,
+      invalidRecords: invalidYearRecords.map(r => r.Fecha_programacion)
+    });
   }
   
   console.log(`[INFO] Recibidos ${records.length} registros para guardar`);
   console.log('[DEBUG] Primer registro:', JSON.stringify(records[0]));
-  
+
+  let connection;
   try {
-    // Try to get a connection from the pool
-    let connection;
-    try {
-      console.log('[INFO] Intentando conectar a MySQL...');
-      connection = await pool.getConnection();
-      console.log('[INFO] Conexión a MySQL establecida');
-    } catch (connError) {
-      console.error('[ERROR] MySQL connection error:', connError);
-      
-      // In development mode, we'll simulate successful save
-      if (process.env.NODE_ENV === 'development' || !process.env.NODE_ENV) {
-        console.log('[INFO] Running in development mode - simulating successful save');
-        return res.status(200).json({ 
-          message: 'Data saved successfully (development mode)', 
-          recordCount: records.length 
+    // Conexión a la base de datos
+    console.log('[INFO] Intentando conectar a MySQL...');
+    connection = await pool.getConnection();
+    console.log('[INFO] Conexión a MySQL establecida');
+
+    // Verificar y crear tabla si no existe
+    console.log('[INFO] Verificando estructura de la tabla...');
+    const [tables] = await connection.execute(`
+      SELECT TABLE_NAME 
+      FROM information_schema.tables 
+      WHERE table_schema = ? 
+      AND table_name = 'programacion_turnos'
+    `, [dbConfig.database]);
+
+    if (tables.length === 0) {
+      console.log('[INFO] Creando tabla programacion_turnos...');
+      await connection.execute(`
+        CREATE TABLE programacion_turnos (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          CEDULA BIGINT(20) NOT NULL,
+          Fecha_programacion DATE NOT NULL,
+          Horario_programacion VARCHAR(50) NOT NULL,
+          Area VARCHAR(50) NOT NULL,
+          Tiempo_a_descontar DOUBLE DEFAULT 0,
+          Quincena VARCHAR(20) NOT NULL,
+          clasificacion VARCHAR(100) NOT NULL,
+          fecha_consulta DATETIME NOT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE KEY unique_schedule (CEDULA, Fecha_programacion, Area)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+      `);
+      console.log('[INFO] Tabla creada exitosamente');
+    }
+
+    // Validar y preparar datos
+    console.log('[INFO] Validando registros...');
+    const values = [];
+    const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
+    
+    for (const [index, record] of records.entries()) {
+      try {
+        // Validar CEDULA
+        const cedula = Number(record.CEDULA);
+        if (isNaN(cedula) || cedula.toString().length < 6) {
+          throw new Error(`CEDULA inválida: ${record.CEDULA}`);
+        }
+
+        // Validar y formatear fecha
+        const fechaMatch = record.Fecha_programacion.match(/^(\d{4})-(\d{2})-(\d{2})/);
+        if (!fechaMatch) {
+          throw new Error(`Formato de fecha inválido: ${record.Fecha_programacion}`);
+        }
+        
+        const fecha = `${fechaMatch[1]}-${fechaMatch[2]}-${fechaMatch[3]}`;
+        if (isNaN(Date.parse(fecha))) {
+          throw new Error(`Fecha inválida: ${fecha}`);
+        }
+
+        // Validar horario
+        if (typeof record.Horario_programacion !== 'string' || record.Horario_programacion.trim().length === 0) {
+          throw new Error(`Horario inválido: ${record.Horario_programacion}`);
+        }
+
+        values.push([
+          cedula,
+          fecha,
+          record.Horario_programacion.trim(),
+          record.Area,
+          Number(record.Tiempo_a_descontar) || 0,
+          record.Quincena,
+          record.clasificacion || 'No especificado',
+          now
+        ]);
+
+      } catch (validationError) {
+        console.error(`[ERROR] Error en registro ${index + 1}:`, validationError.message);
+        return res.status(400).json({
+          error: 'Error de validación de datos',
+          details: validationError.message,
+          failedRecord: record,
+          recordIndex: index
         });
-      } else {
-        throw connError; // Re-throw in production
       }
     }
-    
+
+    // Transacción de inserción
+    console.log('[INFO] Iniciando transacción...');
+    await connection.beginTransaction();
+
     try {
-      // Check if the table exists first
-      console.log('[INFO] Verificando si existe la tabla programacion_turnos...');
-      const [tables] = await connection.execute(`
-        SELECT TABLE_NAME 
-        FROM information_schema.tables 
-        WHERE table_schema = ? 
-        AND table_name = 'programacion_turnos'
-      `, [dbConfig.database]);
-      
-      console.log('[DEBUG] Resultado de verificación de tabla:', tables);
-      
-      // If table doesn't exist, create it
-      if (!tables || (tables).length === 0) {
-        console.log('[INFO] Creando tabla programacion_turnos...');
-        await connection.execute(`
-          CREATE TABLE programacion_turnos (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            CEDULA BIGINT(20) NOT NULL,
-            Fecha_programacion DATE NOT NULL,
-            Horario_programacion TEXT NOT NULL,
-            Area VARCHAR(50) NOT NULL,
-            Tiempo_a_descontar DOUBLE DEFAULT 0,
-            Quincena VARCHAR(20) NOT NULL,
-            clasificacion VARCHAR(100) NOT NULL,
-            fecha_consulta DATETIME NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-          )
-        `);
-        
-        // Create indexes for better performance
-        console.log('[INFO] Creando índices...');
-        await connection.execute(`CREATE INDEX idx_cedula ON programacion_turnos(CEDULA)`);
-        await connection.execute(`CREATE INDEX idx_fecha_programacion ON programacion_turnos(Fecha_programacion)`);
-        await connection.execute(`CREATE INDEX idx_area ON programacion_turnos(Area)`);
-        await connection.execute(`CREATE INDEX idx_quincena ON programacion_turnos(Quincena)`);
-        console.log('[INFO] Tabla e índices creados correctamente');
-      }
-      
-      // Start transaction
-      console.log('[INFO] Iniciando transacción...');
-      await connection.beginTransaction();
-      
-      // Prepare query
-      const query = `
-        INSERT INTO programacion_turnos 
-        (CEDULA, Fecha_programacion, Horario_programacion, Area, 
-        Tiempo_a_descontar, Quincena, clasificacion, fecha_consulta) 
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `;
-      
-      // Insert records
+      // Inserción masiva
       console.log('[INFO] Insertando registros...');
-      let insertedCount = 0;
-      
-      for (const record of records) {
-        // Validar y formatear la fecha
-        let fechaProgramacion = record.Fecha_programacion;
-        if (fechaProgramacion instanceof Date) {
-          fechaProgramacion = fechaProgramacion.toISOString().split('T')[0];
-        } else if (typeof fechaProgramacion === 'string') {
-          fechaProgramacion = fechaProgramacion.split('T')[0];
-        }
-        
-        try {
-          await connection.execute(query, [
-            record.CEDULA,
-            fechaProgramacion,
-            record.Horario_programacion,
-            record.Area,
-            record.Tiempo_a_descontar,
-            record.Quincena,
-            record.clasificacion,
-            record.fecha_consulta
-          ]);
-          insertedCount++;
-          
-          // Log progress for large batches
-          if (insertedCount % 100 === 0) {
-            console.log(`[INFO] Insertados ${insertedCount} de ${records.length} registros...`);
-          }
-        } catch (insertError) {
-          console.error(`[ERROR] Error al insertar registro ${insertedCount + 1}:`, insertError);
-          throw insertError;
-        }
-      }
-      
-      // Commit transaction
+      const [result] = await connection.query(
+        `INSERT INTO programacion_turnos 
+        (CEDULA, Fecha_programacion, Horario_programacion, Area, 
+         Tiempo_a_descontar, Quincena, clasificacion, fecha_consulta)
+        VALUES ?`,
+        [values]
+      );
+
       console.log('[INFO] Confirmando transacción...');
       await connection.commit();
-      console.log('[INFO] Transacción confirmada correctamente');
-      
-      res.status(200).json({ 
-        message: 'Data saved successfully', 
-        recordCount: records.length 
+
+      console.log('[INFO] Registros insertados:', result.affectedRows);
+      res.status(200).json({
+        message: 'Datos guardados exitosamente',
+        recordCount: result.affectedRows,
+        insertedIds: result.insertId ? Array.from(
+          {length: result.affectedRows}, 
+          (_, i) => result.insertId + i
+        ) : []
       });
-    } catch (error) {
-      // Rollback in case of error
-      console.error('[ERROR] Error en la transacción, realizando rollback:', error);
+
+    } catch (insertError) {
+      console.error('[ERROR] Error en inserción:', insertError);
       await connection.rollback();
-      console.log('[INFO] Rollback completado');
       
-      // In development mode, we'll simulate successful save on error
-      if (process.env.NODE_ENV === 'development' || !process.env.NODE_ENV) {
-        console.log('[INFO] Error in save operation - simulating successful save in development mode');
-        return res.status(200).json({ 
-          message: 'Data saved successfully (development mode)', 
-          recordCount: records.length 
+      // Manejo detallado de errores de MySQL
+      if (insertError.code === 'ER_DUP_ENTRY') {
+        const match = insertError.message.match(/Duplicate entry '(.+)' for key/);
+        return res.status(409).json({
+          error: 'Registro duplicado',
+          details: match ? `Conflicto en: ${match[1]}` : insertError.message
         });
       }
-      
-      res.status(500).json({ error: 'Failed to save data to database', details: error.message });
-    } finally {
-      connection.release();
-      console.log('[INFO] Conexión a MySQL liberada');
+
+      res.status(500).json({
+        error: 'Error al guardar los datos',
+        details: insertError.message,
+        sqlCode: insertError.code
+      });
     }
-  } catch (error) {
-    console.error('[ERROR] Database connection error:', error);
-    res.status(500).json({ error: 'Failed to connect to database', details: error.message });
+
+  } catch (connectionError) {
+    console.error('[ERROR] Error de conexión:', connectionError);
+    
+    // Modo desarrollo: Proveer detalles del error
+    const errorResponse = {
+      error: 'Error de conexión a la base de datos',
+      details: connectionError.message,
+      code: connectionError.code
+    };
+
+    if (process.env.NODE_ENV === 'development') {
+      errorResponse.stack = connectionError.stack;
+      errorResponse.config = {
+        database: dbConfig.database,
+        host: dbConfig.host,
+        port: dbConfig.port
+      };
+    }
+
+    res.status(500).json(errorResponse);
+
+  } finally {
+    if (connection) {
+      connection.release();
+      console.log('[INFO] Conexión liberada');
+    }
   }
 });
 

@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FileUploader, DataTable, Header, StatsCard, WelcomeScreen } from './components';
+import { FileUploader, DataTable, StatsCard, WelcomeScreen } from './components';
 import { parseExcelFile } from './utils/excelParser';
 import { ExcelData, AreaType } from './types';
 import { Loader2, AlertTriangle } from 'lucide-react';

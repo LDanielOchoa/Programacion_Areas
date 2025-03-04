@@ -1,557 +1,530 @@
-import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { ExcelData, AreaType } from '../types';
-import { ArrowLeft, Save, Check, AlertCircle, AlertTriangle } from 'lucide-react';
-import { saveToDatabase, checkDatesExist } from '../utils/databaseService';
-import { validateEmployeesInSQLServer } from '../utils/sqlServerService';
-import SaveAnimation from './SaveAnimation';
-import EmployeeValidationModal from './EmployeeValidationModal';
-import DateExistModal from './DateExistModal';
+"use client"
+
+import type React from "react"
+import { useState, useEffect, useRef } from "react"
+import { motion, AnimatePresence } from "framer-motion"
+import type { ExcelData, AreaType } from "../types"
+import { ArrowLeft, Save, Check, AlertCircle, AlertTriangle, Calendar, Users, Clock } from "lucide-react"
+import { saveToDatabase, checkDatesExist } from "../utils/databaseService"
+import { validateEmployeesInSQLServer } from "../utils/sqlServerService"
+import SaveAnimation from "./SaveAnimation"
+import EmployeeValidationModal from "./EmployeeValidationModal"
+import DateExistModal from "./DateExistModal"
+import axios from "axios"
 
 interface DataTableProps {
-  data: ExcelData | null;
-  selectedArea: AreaType;
-  onBack: () => void;
+  data: ExcelData | null
+  selectedArea: AreaType
+  onBack: () => void
 }
 
 const DataTable: React.FC<DataTableProps> = ({ data, selectedArea, onBack }) => {
-  const [isSaving, setIsSaving] = useState(false);
-  const [saveStatus, setSaveStatus] = useState<'success' | 'error' | null>(null);
-  const [statusMessage, setStatusMessage] = useState('');
-  const [recordCount, setRecordCount] = useState(0);
-  const [showAnimation, setShowAnimation] = useState(false);
-  const [animationStage, setAnimationStage] = useState<'validating' | 'transferring' | 'saving'>('validating');
-  const [showValidationModal, setShowValidationModal] = useState(false);
-  const [invalidEmployees, setInvalidEmployees] = useState<{cedula: string | number, nombre: string}[]>([]);
-  const [showDateExistModal, setShowDateExistModal] = useState(false);
-  const [existingDates, setExistingDates] = useState<string[]>([]);
-  const [preparedRecords, setPreparedRecords] = useState<any[]>([]);
-  const [sqlServerError, setSqlServerError] = useState<string | null>(null);
-  const [mysqlError, setMysqlError] = useState<string | null>(null);
-  const [debugInfo, setDebugInfo] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false)
+  const [saveStatus, setSaveStatus] = useState<"success" | "error" | null>(null)
+  const [statusMessage, setStatusMessage] = useState("")
+  const [recordCount, setRecordCount] = useState(0)
+  const [showAnimation, setShowAnimation] = useState(false)
+  const [animationStage, setAnimationStage] = useState<"validating" | "transferring" | "saving">("validating")
+  const [showValidationModal, setShowValidationModal] = useState(false)
+  const [invalidEmployees, setInvalidEmployees] = useState<{ cedula: string | number; nombre: string }[]>([])
+  const [showDateExistModal, setShowDateExistModal] = useState(false)
+  const [existingDates, setExistingDates] = useState<string[]>([])
+  const [preparedRecords, setPreparedRecords] = useState<any[]>([])
+  const [sqlServerError, setSqlServerError] = useState<string | null>(null)
+  const [mysqlError, setMysqlError] = useState<string | null>(null)
+  const [debugInfo, setDebugInfo] = useState<string | null>(null)
+  const tableRef = useRef<HTMLDivElement>(null)
 
   // Debug effect to log data changes
   useEffect(() => {
     if (data) {
-      console.log('[DEBUG] Excel Data Structure:', {
+      console.log("[DEBUG] Excel Data Structure:", {
         headers: data.headers,
         rowCount: data.rows.length,
-        sampleRow: data.rows[0]
-      });
+        sampleRow: data.rows[0],
+      })
     }
-  }, [data]);
+  }, [data])
+
+  // Effect to scroll to status message when it changes
+  useEffect(() => {
+    if (saveStatus && tableRef.current) {
+      tableRef.current.scrollIntoView({ behavior: "smooth", block: "start" })
+    }
+  }, [saveStatus])
 
   if (!data || !data.headers.length) {
-    return null;
+    return null
   }
 
   const getAreaColor = () => {
     switch (selectedArea) {
-      case 'Operaciones': return 'bg-blue-500';
-      case 'Lavado': return 'bg-cyan-500';
-      case 'Mantenimiento': return 'bg-amber-500';
-      case 'Remanofactura': return 'bg-emerald-500';
-      case 'ServiciosGenerales': return 'bg-purple-500';
-      case 'Vigilantes': return 'bg-red-500';
-      default: return 'bg-green-500';
+      case "Operaciones":
+        return "bg-blue-500"
+      case "Lavado":
+        return "bg-cyan-500"
+      case "Mantenimiento":
+        return "bg-amber-500"
+      case "Remanofactura":
+        return "bg-emerald-500"
+      case "ServiciosGenerales":
+        return "bg-purple-500"
+      case "Vigilantes":
+        return "bg-red-500"
+      default:
+        return "bg-green-500"
     }
-  };
+  }
 
   const getAreaLightColor = () => {
     switch (selectedArea) {
-      case 'Operaciones': return 'bg-blue-50 text-blue-800';
-      case 'Lavado': return 'bg-cyan-50 text-cyan-800';
-      case 'Mantenimiento': return 'bg-amber-50 text-amber-800';
-      case 'Remanofactura': return 'bg-emerald-50 text-emerald-800';
-      case 'ServiciosGenerales': return 'bg-purple-50 text-purple-800';
-      case 'Vigilantes': return 'bg-red-50 text-red-800';
-      default: return 'bg-green-50 text-green-800';
+      case "Operaciones":
+        return "bg-blue-50 text-blue-800"
+      case "Lavado":
+        return "bg-cyan-50 text-cyan-800"
+      case "Mantenimiento":
+        return "bg-amber-50 text-amber-800"
+      case "Remanofactura":
+        return "bg-emerald-50 text-emerald-800"
+      case "ServiciosGenerales":
+        return "bg-purple-50 text-purple-800"
+      case "Vigilantes":
+        return "bg-red-50 text-red-800"
+      default:
+        return "bg-green-50 text-green-800"
     }
-  };
+  }
 
   const getAreaHoverColor = () => {
     switch (selectedArea) {
-      case 'Operaciones': return 'hover:bg-blue-100';
-      case 'Lavado': return 'hover:bg-cyan-100';
-      case 'Mantenimiento': return 'hover:bg-amber-100';
-      case 'Remanofactura': return 'hover:bg-emerald-100';
-      case 'ServiciosGenerales': return 'hover:bg-purple-100';
-      case 'Vigilantes': return 'hover:bg-red-100';
-      default: return 'hover:bg-green-100';
+      case "Operaciones":
+        return "hover:bg-blue-100"
+      case "Lavado":
+        return "hover:bg-cyan-100"
+      case "Mantenimiento":
+        return "hover:bg-amber-100"
+      case "Remanofactura":
+        return "hover:bg-emerald-100"
+      case "ServiciosGenerales":
+        return "hover:bg-purple-100"
+      case "Vigilantes":
+        return "hover:bg-red-100"
+      default:
+        return "hover:bg-green-100"
     }
-  };
+  }
 
   const getButtonColor = () => {
     switch (selectedArea) {
-      case 'Operaciones': return 'bg-blue-600 hover:bg-blue-700';
-      case 'Lavado': return 'bg-cyan-600 hover:bg-cyan-700';
-      case 'Mantenimiento': return 'bg-amber-600 hover:bg-amber-700';
-      case 'Remanofactura': return 'bg-emerald-600 hover:bg-emerald-700';
-      case 'ServiciosGenerales': return 'bg-purple-600 hover:bg-purple-700';
-      case 'Vigilantes': return 'bg-red-600 hover:bg-red-700';
-      default: return 'bg-green-600 hover:bg-green-700';
+      case "Operaciones":
+        return "bg-blue-600 hover:bg-blue-700"
+      case "Lavado":
+        return "bg-cyan-600 hover:bg-cyan-700"
+      case "Mantenimiento":
+        return "bg-amber-600 hover:bg-amber-700"
+      case "Remanofactura":
+        return "bg-emerald-600 hover:bg-emerald-700"
+      case "ServiciosGenerales":
+        return "bg-purple-600 hover:bg-purple-700"
+      case "Vigilantes":
+        return "bg-red-600 hover:bg-red-700"
+      default:
+        return "bg-green-600 hover:bg-green-700"
     }
-  };
+  }
+
+  const getAreaBorderColor = () => {
+    switch (selectedArea) {
+      case "Operaciones":
+        return "border-blue-200"
+      case "Lavado":
+        return "border-cyan-200"
+      case "Mantenimiento":
+        return "border-amber-200"
+      case "Remanofactura":
+        return "border-emerald-200"
+      case "ServiciosGenerales":
+        return "border-purple-200"
+      case "Vigilantes":
+        return "border-red-200"
+      default:
+        return "border-green-200"
+    }
+  }
 
   // Extract metadata from the first row if it exists
-  const hasMetadata = data.rows[0] && data.rows[0][0] === 'Responsable:';
-  const metadata = hasMetadata ? data.rows[0] : null;
-  const displayRows = hasMetadata ? data.rows.slice(1) : data.rows;
-  
+  const hasMetadata = data.rows[0] && data.rows[0][0] === "Responsable:"
+  const metadata = hasMetadata ? data.rows[0] : null
+  const displayRows = hasMetadata ? data.rows.slice(1) : data.rows
 
   // Extract date range from metadata
-  const dateRange = metadata ? metadata[3] : '';
-  
+  const dateRange = metadata ? metadata[3] : ""
+
   // Determine quincena based on date range
   const getQuincena = () => {
-    if (!dateRange) return '';
-    
+    if (!dateRange) return ""
+
     // Assuming date range is in format "DD - DD" of the current month
-    const parts = dateRange.split('-').map(part => part.trim());
-    if (parts.length !== 2) return '';
-    
-    const startDay = parseInt(parts[0]);
-    return startDay <= 15 ? 'Primera' : 'Segunda';
-  };
+    const parts = dateRange.split("-").map((part) => part.trim())
+    if (parts.length !== 2) return ""
+
+    const startDay = Number.parseInt(parts[0])
+    return startDay <= 15 ? "Primera" : "Segunda"
+  }
 
   // Filter out empty columns from the data
   const filterEmptyColumns = () => {
-    if (!data || !data.headers.length) return { headers: [], rows: [] };
-    
+    if (!data || !data.headers.length) return { headers: [], rows: [] }
+
     // Find columns that have data
-    const nonEmptyColumnIndexes: number[] = [];
-    
+    const nonEmptyColumnIndexes: number[] = []
+
     // Check each column
     for (let colIndex = 0; colIndex < data.headers.length; colIndex++) {
       // Check if header exists
       if (data.headers[colIndex]) {
         // Check if any row has data in this column
-        const hasData = displayRows.some(row => {
-          return row[colIndex] !== undefined && row[colIndex] !== null && row[colIndex] !== '';
-        });
-        
-        if (hasData || colIndex < 4) { // Always keep the first 4 columns (ID, CEDULA, NOMBRE, CARGO)
-          nonEmptyColumnIndexes.push(colIndex);
+        const hasData = displayRows.some((row) => {
+          return row[colIndex] !== undefined && row[colIndex] !== null && row[colIndex] !== ""
+        })
+
+        if (hasData || colIndex < 4) {
+          // Always keep the first 4 columns (ID, CEDULA, NOMBRE, CARGO)
+          nonEmptyColumnIndexes.push(colIndex)
         }
       }
     }
-    
+
     // Filter headers
-    const filteredHeaders = nonEmptyColumnIndexes.map(index => data.headers[index]);
-    
+    const filteredHeaders = nonEmptyColumnIndexes.map((index) => data.headers[index])
+
     // Filter rows
-    const filteredRows = displayRows.map(row => {
-      return nonEmptyColumnIndexes.map(index => row[index]);
-    });
-    
-    return { headers: filteredHeaders, rows: filteredRows };
-  };
-  
+    const filteredRows = displayRows.map((row) => {
+      return nonEmptyColumnIndexes.map((index) => row[index])
+    })
+
+    return { headers: filteredHeaders, rows: filteredRows }
+  }
+
   // Get filtered data
-  const filteredData = filterEmptyColumns();
+  const filteredData = filterEmptyColumns()
 
   const continueWithSave = async () => {
-    if (!preparedRecords.length) {
-      console.error('[DEBUG] No records to save!');
-      setDebugInfo('Error: No hay registros preparados para guardar');
-      return;
+    // Verificar si hay registros válidos
+    if (!preparedRecords || preparedRecords.length === 0) {
+      console.error("[DEBUG] No hay registros para guardar:", preparedRecords)
+      setDebugInfo("Error crítico: No hay datos válidos para guardar")
+      setSaveStatus("error")
+      setStatusMessage("Error interno: No se prepararon los registros correctamente")
+      return
     }
-    
-    setShowDateExistModal(false);
-    setAnimationStage('saving');
-    setShowAnimation(true);
-    setDebugInfo(null);
-    
+
     try {
-      // Wait for animation
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      console.log('[DEBUG] Records to save:', preparedRecords);
-      setDebugInfo(`Iniciando guardado de ${preparedRecords.length} registros...`);
-      
-      // Save to database
-      const result = await saveToDatabase(preparedRecords);
-      
-      console.log('[DEBUG] Save result:', result);
-      setDebugInfo(prev => `${prev}\nGuardado completado. Respuesta: ${JSON.stringify(result)}`);
-      
-      // Keep animation visible for a bit longer after saving
-      await new Promise(resolve => setTimeout(resolve, 800));
-      
-      setShowAnimation(false);
-      setSaveStatus('success');
-      setStatusMessage(`${preparedRecords.length} registros guardados correctamente en la base de datos`);
-    } catch (error: any) {
-      console.error('[DEBUG] Save error:', error);
-      setShowAnimation(false);
-      
-      let errorDetails = `Error: ${error.message}`;
-      if (error.response) {
-        errorDetails += `\nStatus: ${error.response.status}`;
-        errorDetails += `\nData: ${JSON.stringify(error.response.data)}`;
-      } else if (error.request) {
-        errorDetails += `\nNo se recibió respuesta del servidor`;
+      // Resetear estados importantes
+      setShowDateExistModal(false)
+      setSaveStatus(null)
+      setStatusMessage("")
+      setDebugInfo(`Iniciando proceso de guardado...\nRegistros a guardar: ${preparedRecords.length}`)
+
+      // Iniciar animación
+      setAnimationStage("saving")
+      setShowAnimation(true)
+
+      // Esperar para visualización de animación
+      await new Promise((resolve) => setTimeout(resolve, 1000)) // Reducido a 1 segundo
+
+      console.log("[DEBUG] Enviando registros:", preparedRecords)
+      setDebugInfo((prev) => `${prev}\nEnviando datos al servidor...`)
+
+      // Intentar guardar
+      const startTime = Date.now()
+      const result = await saveToDatabase(preparedRecords)
+      const elapsedTime = ((Date.now() - startTime) / 1000).toFixed(2)
+
+      console.log("[DEBUG] Respuesta del servidor:", result)
+      setDebugInfo((prev) => `${prev}\nServidor respondió en ${elapsedTime}s: ${JSON.stringify(result, null, 2)}`)
+
+      // Validar respuesta del servidor
+      if (!result?.success) {
+        throw new Error(result?.error || "Respuesta inválida del servidor")
       }
-      setDebugInfo(errorDetails);
-      
-      if (error.response?.data?.message?.includes('development mode')) {
-        setSaveStatus('success');
-        setStatusMessage(`${preparedRecords.length} registros guardados correctamente (modo desarrollo)`);
-      } else {
-        setSaveStatus('error');
-        setStatusMessage(error instanceof Error ? error.message : 'Error al guardar en la base de datos');
+
+      // Actualizar UI
+      setDebugInfo((prev) => `${prev}\nActualizando interfaz...`)
+      await new Promise((resolve) => setTimeout(resolve, 500)) // Espera para animación
+
+      setSaveStatus("success")
+      setStatusMessage(`${preparedRecords.length} registros guardados exitosamente`)
+    } catch (error: any) {
+      console.error("[DEBUG] Error completo:", error)
+
+      // Manejar errores específicos
+      const errorMessage = error.response?.data?.error?.includes("duplicado")
+        ? "Datos duplicados: Algunos registros ya existen"
+        : error.message
+
+      // Actualizar estados de error
+      setDebugInfo(
+        (prev) =>
+          `${prev || "Error durante el guardado"}\n` +
+          `ERROR: ${errorMessage}\n` +
+          `Stack: ${error.stack || "No disponible"}`,
+      )
+
+      setSaveStatus("error")
+      setStatusMessage(errorMessage)
+
+      // Mostrar error en consola detallado
+      if (error.response) {
+        console.error("Error del servidor:", {
+          status: error.response.status,
+          data: error.response.data,
+          headers: error.response.headers,
+        })
+      } else if (error.request) {
+        console.error("No hubo respuesta del servidor:", error.request)
       }
     } finally {
-      setIsSaving(false);
+      // Limpiar estados independientemente del resultado
+      setTimeout(() => {
+        setShowAnimation(false)
+        setAnimationStage("validating")
+        setIsSaving(false)
+        setDebugInfo(null)
+      }, 2000) // Limpiar después de 2 segundos
     }
-  };
+  }
 
-  // Función para convertir fechas de formato "DD-MMM" a "YYYY-MM-DD"
   const formatDateForDatabase = (dateHeader: any): string => {
-    console.log('[DEBUG] Formatting date:', dateHeader);
-    
-    if (dateHeader instanceof Date) {
-      const formatted = dateHeader.toISOString().split('T')[0];
-      console.log('[DEBUG] Date object formatted:', formatted);
-      return formatted;
-    } 
-    
-    if (typeof dateHeader === 'string') {
-      // Si ya está en formato YYYY-MM-DD
-      if (/^\d{4}-\d{2}-\d{2}/.test(dateHeader)) {
-        const formatted = dateHeader.split('T')[0];
-        console.log('[DEBUG] Already in YYYY-MM-DD format:', formatted);
-        return formatted;
-      }
-      
-      // Si está en formato DD-MMM (ej: "17-Feb")
-      if (/^\d{1,2}-[A-Za-z]{3}$/.test(dateHeader)) {
-        const parts = dateHeader.split('-');
+    console.log("[DEBUG] Formatting date:", dateHeader)
+
+    const currentYear = new Date().getFullYear() // Año actual real
+
+    if (typeof dateHeader === "string") {
+      if (/^\d{1,2}-[A-Za-z]{3}$/i.test(dateHeader)) {
+        const parts = dateHeader.split("-")
         if (parts.length === 2) {
-          const day = parts[0].trim().padStart(2, '0');
-          const month = parts[1].trim();
-          
-          // Mapeo de nombres de mes a números
-          const monthMap: {[key: string]: string} = {
-            'Jan': '01', 'Feb': '02', 'Mar': '03', 'Apr': '04', 'May': '05', 'Jun': '06',
-            'Jul': '07', 'Aug': '08', 'Sep': '09', 'Oct': '10', 'Nov': '11', 'Dec': '12',
-            'Ene': '01', 'Feb': '02', 'Mar': '03', 'Abr': '04', 'May': '05', 'Jun': '06',
-            'Jul': '07', 'Ago': '08', 'Sep': '09', 'Oct': '10', 'Nov': '11', 'Dic': '12'
-          };
-          
-          let monthNum = '01';
-          for (const [key, value] of Object.entries(monthMap)) {
-            if (month.includes(key)) {
-              monthNum = value;
-              break;
-            }
+          const day = parts[0].trim().padStart(2, "0")
+          const month = parts[1].trim().substring(0, 3).toLowerCase()
+
+          const monthMap: { [key: string]: string } = {
+            ene: "01",
+            feb: "02",
+            mar: "03",
+            abr: "04",
+            may: "05",
+            jun: "06",
+            jul: "07",
+            ago: "08",
+            sep: "09",
+            oct: "10",
+            nov: "11",
+            dic: "12",
           }
-          
-          // Usar el año actual
-          const currentYear = new Date().getFullYear();
-          const formatted = `${currentYear}-${monthNum}-${day}`;
-          console.log('[DEBUG] DD-MMM format converted:', formatted);
-          return formatted;
+
+          const monthNum = monthMap[month] || "01"
+          return `${currentYear}-${monthNum}-${day}` // Usar año actual
         }
-      }
-      
-      // Intentar parsear como fecha
-      try {
-        const date = new Date(dateHeader);
-        if (!isNaN(date.getTime())) {
-          const formatted = date.toISOString().split('T')[0];
-          console.log('[DEBUG] Parsed as Date object:', formatted);
-          return formatted;
-        }
-      } catch (e) {
-        console.error('[DEBUG] Error parsing date:', e);
       }
     }
-    
-    console.log('[DEBUG] Using original date string:', dateHeader);
-    return String(dateHeader);
-  };
+
+    // Intentar parsear como fecha
+    const date = new Date(dateHeader)
+    if (!isNaN(date.getTime())) {
+      return date.toISOString().split("T")[0]
+    }
+
+    console.log("[DEBUG] Using original date string:", dateHeader)
+    return String(dateHeader)
+  }
 
   const handleSaveToDatabase = async () => {
-    if (!data || isSaving) return;
-    
-    setIsSaving(true);
-    setSaveStatus(null);
-    setStatusMessage('');
-    setSqlServerError(null);
-    setMysqlError(null);
-    setDebugInfo(null);
-    
-    try {
-      // Prepare data for database
-      const currentDate = new Date();
-      const quincena = getQuincena();
-      
-      // Get date headers (assuming they are in positions 4-10)
-      const dateHeaders = data.headers.slice(4); // Requiere al menos 5 columnas
-      console.log('[DEBUG] Date headers:', dateHeaders);
-      
-      // Prepare records for database
-      const records = [];
-      
-      // Extract unique employees for validation
-      const uniqueEmployees = new Map();
-      
-      console.log('[DEBUG] Starting record preparation');
-      setDebugInfo('Preparando registros para guardar...');
-      
-      for (const row of displayRows) {
-        console.log('[DEBUG] Fila completa:', row);
-        const cedula = row[1]; // Column B - Cédula
-        const nombre = row[2]; // Column C - Nombre
-        const area = selectedArea;
-        const clasificacion = row[3]; // Column D - Cargo
-        console.log('[DEBUG] displayRows:', displayRows);
-        console.log('[DEBUG] Number of date headers:', dateHeaders.length);
-        console.log('[DEBUG] displayRows:', displayRows);
-        console.log('[DEBUG] Number of date headers:', dateHeaders.length);
-        console.log('[DEBUG] Processing row:', {
-          cedula,
-          nombre,
-          area,
-          clasificacion
-        });
-        
-        // Validar que la cédula sea un valor válido
-        if (!cedula) {
-          console.log('[DEBUG] Skipping row - no cedula');
-          continue;
-        }
-        
-        // Add to unique employees map
-        if (cedula && !uniqueEmployees.has(cedula.toString())) {
-          uniqueEmployees.set(cedula.toString(), nombre || 'Sin nombre');
-        }
-        
-        // For each date in the headers
-        for (let i = 0; i < dateHeaders.length; i++) {
-          const dateHeader = dateHeaders[i];
-          const horario = row[i + 4]; // Shift for this date (columns E-K)
-          
-          if (horario) {
-            console.log('[DEBUG] Processing schedule:', {
-              date: dateHeader,
-              horario
-            });
-            
-            // Calculate tiempo a descontar if needed
-            const tiempoDescontar = horario.toString().toUpperCase() === 'DESCANSO' || 
-                                   horario.toString().toUpperCase() === 'VACACIONES' ? 
-                                   0 : 8; // Default to 8 hours for regular shifts
-            
-            // Formatear la fecha para la base de datos
-            const fechaProgramacion = formatDateForDatabase(dateHeader);
-            
-            const record = {
-              CEDULA: cedula,
-              Fecha_programacion: fechaProgramacion,
-              Horario_programacion: horario,
-              Area: area,
-              Tiempo_a_descontar: tiempoDescontar,
-              Quincena: quincena,
-              clasificacion: clasificacion || 'No especificado',
-              fecha_consulta: currentDate.toISOString()
-            };
-            
-            for (let i = 0; i < dateHeaders.length; i++) {
-              const horario = row[i + 4];
-              console.log(`[DEBUG] Celda de horario (col ${i + 4}):`, horario); // <- ¡Esto es crítico!
-            }
+    if (!data || isSaving) return
 
-            console.log('[DEBUG] Created record:', record);
-            records.push(record);
+    // Resetear todos los estados relevantes
+    setIsSaving(true)
+    setSaveStatus(null)
+    setStatusMessage("")
+    setSqlServerError(null)
+    setMysqlError(null)
+    setDebugInfo("Iniciando proceso de guardado...")
+    setPreparedRecords([])
+
+    try {
+      // 1. Preparar registros
+      const currentDate = new Date()
+      const quincena = getQuincena()
+      const dateHeaders = data.headers.slice(4)
+
+      // Crear copia local de los registros
+      const localRecords = []
+
+      // Procesamiento optimizado de filas
+      for (const row of displayRows) {
+        const cedula = row[1]
+        if (!cedula) continue
+
+        for (let i = 0; i < dateHeaders.length; i++) {
+          const horario = row[i + 4]
+          if (!horario) continue
+
+          const record = {
+            CEDULA: cedula,
+            Fecha_programacion: formatDateForDatabase(dateHeaders[i]),
+            Horario_programacion: horario,
+            Area: selectedArea,
+            Tiempo_a_descontar: ["DESCANSO", "VACACIONES"].includes(horario.toString().toUpperCase()) ? 0 : 8,
+            Quincena: quincena,
+            clasificacion: row[3] || "No especificado",
+            fecha_consulta: currentDate.toISOString(),
           }
+
+          localRecords.push(record)
         }
       }
-      
-      // Verificar que haya registros para guardar
-      if (records.length === 0) {
-        console.error('[DEBUG] No valid records found');
-        setIsSaving(false);
-        setSaveStatus('error');
-        setStatusMessage('No hay datos válidos para guardar en la base de datos');
-        setDebugInfo('Error: No hay datos válidos para guardar');
-        return;
+
+      if (localRecords.length === 0) {
+        throw new Error("No hay registros válidos para guardar")
       }
-      
-      console.log('[DEBUG] Total records prepared:', records.length);
-      setDebugInfo(prev => `${prev}\nRegistros preparados: ${records.length}`);
-      
-      setRecordCount(records.length);
-      setPreparedRecords(records);
-      setAnimationStage('validating');
-      setShowAnimation(true);
-      
-      // Validate employees in SQL Server
+
+      // 2. Validación de empleados
+      setAnimationStage("validating")
+      setShowAnimation(true)
+      await new Promise((resolve) => setTimeout(resolve, 1000)) // Animación
+
+      const employees = Array.from(new Map(displayRows.map((row) => [row[1], row[2]]))).map(([cedula, nombre]) => ({
+        cedula,
+        nombre,
+      }))
+
+      const validationResult = await validateEmployeesInSQLServer(
+        employees.map((e) => e.cedula),
+        employees.map((e) => e.nombre),
+      )
+
+      if (!validationResult.isValid) {
+        setInvalidEmployees(validationResult.invalidEmployees)
+        setShowValidationModal(true)
+        return
+      }
+
+      // 3. Verificación de fechas
+      setAnimationStage("transferring")
+      await new Promise((resolve) => setTimeout(resolve, 1000))
+
+      const uniqueDates = [...new Set(dateHeaders.map(formatDateForDatabase))]
+      const dateCheckResult = await checkDatesExist(uniqueDates, selectedArea)
+
+      if (dateCheckResult.exists) {
+        setExistingDates(dateCheckResult.existingDates)
+        setShowDateExistModal(true)
+        return
+      }
+
+      // 4. Guardado final
+      setAnimationStage("saving")
+      setPreparedRecords(localRecords) // Usar la copia local actualizada
+      setRecordCount(localRecords.length)
+
       try {
-        const employeesToValidate = Array.from(uniqueEmployees.entries()).map(([cedula, nombre]) => ({
-          cedula,
-          nombre: nombre as string
-        }));
-        
-        console.log('[DEBUG] Employees to validate:', employeesToValidate);
-        setDebugInfo(prev => `${prev}\nValidando ${employeesToValidate.length} empleados...`);
-        
-        // Wait for validation animation to show
-        await new Promise(resolve => setTimeout(resolve, 1500));
-        
-        const validationResult = await validateEmployeesInSQLServer(
-          employeesToValidate.map(e => e.cedula),
-          employeesToValidate.map(e => e.nombre)
-        );
-        
-        console.log('[DEBUG] Employee validation result:', validationResult);
-        setDebugInfo(prev => `${prev}\nResultado de validación: ${JSON.stringify(validationResult)}`);
-        
-        if (!validationResult.isValid) {
-          setShowAnimation(false);
-          setInvalidEmployees(validationResult.invalidEmployees);
-          setShowValidationModal(true);  
-          setIsSaving(false);
-          return;  
-        }
-        
-        // Continue with checking dates if employee validation passed
-        setAnimationStage('transferring');
-        await new Promise(resolve => setTimeout(resolve, 1500));
-        
-        // Check if dates already exist in the database
-        try {
-          // Extract unique dates from date headers and format them properly
-          const uniqueDates = [...new Set(dateHeaders.map(date => formatDateForDatabase(date)))];
-          
-          console.log('[DEBUG] Dates to check:', uniqueDates);
-          setDebugInfo(prev => `${prev}\nVerificando ${uniqueDates.length} fechas...`);
-          
-          const dateCheckResult = await checkDatesExist(uniqueDates, selectedArea);
-          
-          console.log('[DEBUG] Date check result:', dateCheckResult);
-          setDebugInfo(prev => `${prev}\nResultado de verificación de fechas: ${JSON.stringify(dateCheckResult)}`);
-          
-          if (dateCheckResult.exists && dateCheckResult.existingDates.length > 0) {
-            setShowAnimation(false);
-            setExistingDates(dateCheckResult.existingDates);
-            setShowDateExistModal(true);  
-            return;  
-          }
-          
-          // If no dates exist, continue with saving
-          await continueWithSave();
-        } catch (dateError: any) {
-          console.error('[DEBUG] Date check error:', dateError);
-          setShowAnimation(false);
-          
-          let errorDetails = `Error al verificar fechas: ${dateError.message}`;
-          if (dateError.response) {
-            errorDetails += `\nStatus: ${dateError.response.status}`;
-            errorDetails += `\nData: ${JSON.stringify(dateError.response.data)}`;
-          } else if (dateError.request) {
-            errorDetails += `\nNo se recibió respuesta del servidor`;
-          }
-          setDebugInfo(errorDetails);
-          
-          if (dateError.response?.status === 500) {
-            setMysqlError('No se pudo verificar las fechas en la base de datos. Continuando en modo de desarrollo.');
-            await continueWithSave();
-          } else {
-            setSaveStatus('error');
-            setStatusMessage('Error al verificar fechas en la base de datos');
-            setIsSaving(false);
-          }
-        }
-        
-      } catch (error: any) {
-        console.error('[DEBUG] Employee validation error:', error);
-        setShowAnimation(false);
-        
-        let errorDetails = `Error al validar empleados: ${error.message}`;
-        if (error.response) {
-          errorDetails += `\nStatus: ${error.response.status}`;
-          errorDetails += `\nData: ${JSON.stringify(error.response.data)}`;
-        } else if (error.request) {
-          errorDetails += `\nNo se recibió respuesta del servidor`;
-        }
-        setDebugInfo(errorDetails);
-        
-        // Check if it's a SQL Server connection error
-        if (error.response?.data?.details?.includes('Failed to connect')) {
-          setSqlServerError('No se pudo conectar al servidor SQL para validar empleados. Continuando en modo de desarrollo.');
-          
-          // Continue with date checking in development mode
-          setAnimationStage('transferring');
-          setShowAnimation(true);
-          
-          await new Promise(resolve => setTimeout(resolve, 1500));
-          
-          // Check if dates already exist in the database
-          try {
-            // Extract unique dates from date headers and format them properly
-            const uniqueDates = [...new Set(dateHeaders.map(date => formatDateForDatabase(date)))];
-            
-            console.log('[DEBUG] Checking dates after SQL error:', uniqueDates);
-            setDebugInfo(prev => `${prev}\nVerificando ${uniqueDates.length} fechas (después de error SQL)...`);
-            
-            const dateCheckResult = await checkDatesExist(uniqueDates, selectedArea);
-            
-            console.log('[DEBUG] Date check result:', dateCheckResult);
-            setDebugInfo(prev => `${prev}\nResultado de verificación de fechas: ${JSON.stringify(dateCheckResult)}`);
-            
-            if (dateCheckResult.exists && dateCheckResult.existingDates.length > 0) {
-              setShowAnimation(false);
-              setExistingDates(dateCheckResult.existingDates);
-              setShowDateExistModal(true);
-              return;
-            }
-            console.log('[DEBUG] Records to save:', records);
-            // Y dentro de continueWithSave:
-            console.log('[DEBUG] Final records being sent:', preparedRecords);
-            // If no dates exist, continue with saving
-            await continueWithSave();
-          } catch (dateError: any) {
-            console.error('[DEBUG] Date check error after SQL error:', dateError);
-            setShowAnimation(false);
-            
-            let errorDetails = `Error al verificar fechas (después de error SQL): ${dateError.message}`;
-            if (dateError.response) {
-              errorDetails += `\nStatus: ${dateError.response.status}`;
-              errorDetails += `\nData: ${JSON.stringify(dateError.response.data)}`;
-            } else if (dateError.request) {
-              errorDetails += `\nNo se recibió respuesta del servidor`;
-            }
-            setDebugInfo(errorDetails);
-            
-            if (dateError.response?.status === 500) {
-              setMysqlError('No se pudo verificar las fechas en la base de datos. Continuando en modo de desarrollo.');
-              await continueWithSave();
-            } else {
-              setSaveStatus('error');
-              setStatusMessage('Error al verificar fechas en la base de datos');
-              setIsSaving(false);
-            }
-          }
+        const result = await axios.post(
+          "http://localhost:3001/api/save-schedule",
+          {
+            records: localRecords,
+            area: selectedArea,
+            timestamp: new Date().toISOString(),
+          },
+          {
+            timeout: 30000,
+            headers: { "Content-Type": "application/json" },
+          },
+        )
+
+        // Manejo de respuesta - Verificar si hay mensaje o success
+        if (result.data && (result.data.success || result.data.message)) {
+          setSaveStatus("success")
+          setStatusMessage(`${localRecords.length} registros guardados exitosamente`)
         } else {
-          setSaveStatus('error');
-          setStatusMessage('Error al validar empleados en la base de datos');
-          setIsSaving(false);
+          // Si la respuesta no tiene success=true ni message pero tampoco lanzó error
+          throw new Error("Respuesta del servidor sin confirmación de éxito")
+        }
+      } catch (axiosError: any) {
+        // Capturar específicamente errores de axios
+        console.error("[AXIOS ERROR]", axiosError)
+
+        if (axiosError.response) {
+          // El servidor respondió con un código de estado fuera del rango 2xx
+          const serverMessage = axiosError.response.data?.error || "Error en la respuesta del servidor"
+          throw new Error(serverMessage)
+        } else if (axiosError.request) {
+          // La solicitud se hizo pero no se recibió respuesta
+          throw new Error("No se recibió respuesta del servidor. Verifique la conexión.")
+        } else {
+          // Error al configurar la solicitud
+          throw axiosError
         }
       }
     } catch (error: any) {
-      console.error('[DEBUG] General error:', error);
-      setShowAnimation(false);
-      setSaveStatus('error');
-      setStatusMessage(error instanceof Error ? error.message : 'Error al guardar en la base de datos');
-      
-      let errorDetails = `Error general: ${error.message}`;
-      setDebugInfo(errorDetails);
-      
-      setIsSaving(false);
+      console.error("[FINAL ERROR]", error)
+
+      // Manejo unificado de errores
+      let errorMessage = "Error desconocido al guardar"
+
+      // Intentar extraer un mensaje más específico
+      if (error.message) {
+        errorMessage = error.message
+      } else if (typeof error === "string") {
+        errorMessage = error
+      }
+
+      setSaveStatus("error")
+      setStatusMessage(errorMessage)
+
+      // Registro detallado para depuración
+      setDebugInfo(`
+        Error: ${errorMessage}
+        Stack: ${error.stack || "No disponible"}
+        ${error.response ? `Respuesta: ${JSON.stringify(error.response.data)}` : ""}
+      `)
+    } finally {
+      // Limpieza final
+      setTimeout(() => {
+        setShowAnimation(false)
+        setIsSaving(false)
+        setAnimationStage("validating")
+      }, 2000)
     }
-  };
+  }
+
+  // Calculate summary statistics
+  const calculateStats = () => {
+    if (!filteredData.rows.length) return { employees: 0, dates: 0, shifts: 0 }
+
+    const uniqueEmployees = new Set()
+    const uniqueDates = new Set()
+    let totalShifts = 0
+
+    filteredData.rows.forEach((row) => {
+      if (row[1]) uniqueEmployees.add(row[1]) // CEDULA column
+
+      // Count non-empty shifts
+      for (let i = 4; i < row.length; i++) {
+        if (row[i]) totalShifts++
+      }
+    })
+
+    // Count date headers
+    const dateHeaders = filteredData.headers.slice(4)
+    uniqueDates.add(...dateHeaders)
+
+    return {
+      employees: uniqueEmployees.size,
+      dates: dateHeaders.length,
+      shifts: totalShifts,
+    }
+  }
+
+  const stats = calculateStats()
 
   return (
     <motion.div
@@ -562,16 +535,16 @@ const DataTable: React.FC<DataTableProps> = ({ data, selectedArea, onBack }) => 
     >
       <AnimatePresence>
         {showAnimation && (
-          <SaveAnimation 
-            isVisible={showAnimation} 
-            area={selectedArea} 
+          <SaveAnimation
+            isVisible={showAnimation}
+            area={selectedArea}
             recordCount={recordCount}
             stage={animationStage}
           />
         )}
       </AnimatePresence>
 
-      <EmployeeValidationModal 
+      <EmployeeValidationModal
         isVisible={showValidationModal}
         onClose={() => setShowValidationModal(false)}
         invalidEmployees={invalidEmployees}
@@ -581,8 +554,8 @@ const DataTable: React.FC<DataTableProps> = ({ data, selectedArea, onBack }) => 
       <DateExistModal
         isVisible={showDateExistModal}
         onClose={() => {
-          setShowDateExistModal(false);
-          setIsSaving(false);
+          setShowDateExistModal(false)
+          setIsSaving(false)
         }}
         existingDates={existingDates}
         area={selectedArea}
@@ -590,16 +563,11 @@ const DataTable: React.FC<DataTableProps> = ({ data, selectedArea, onBack }) => 
       />
 
       <div className="mb-6 flex items-center">
-        <button 
-          onClick={onBack}
-          className="flex items-center text-gray-600 hover:text-green-700 transition-colors"
-        >
+        <button onClick={onBack} className="flex items-center text-gray-600 hover:text-green-700 transition-colors">
           <ArrowLeft size={18} className="mr-1" />
           <span>Volver a cargar archivo</span>
         </button>
-        <h3 className="ml-auto text-lg font-semibold text-gray-700">
-          Datos del área de {selectedArea}
-        </h3>
+        <h3 className="ml-auto text-lg font-semibold text-gray-700">Datos del área de {selectedArea}</h3>
       </div>
 
       {metadata && (
@@ -607,7 +575,7 @@ const DataTable: React.FC<DataTableProps> = ({ data, selectedArea, onBack }) => 
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3 }}
-          className="mb-4 p-4 bg-white rounded-lg shadow-md border border-gray-200"
+          className={`mb-6 p-4 bg-white rounded-lg shadow-md border ${getAreaBorderColor()}`}
         >
           <div className="grid grid-cols-2 gap-4">
             <div className="flex items-center">
@@ -622,11 +590,61 @@ const DataTable: React.FC<DataTableProps> = ({ data, selectedArea, onBack }) => 
         </motion.div>
       )}
 
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, delay: 0.1 }}
+          className={`p-4 bg-white rounded-lg shadow-sm border ${getAreaBorderColor()} flex items-center`}
+        >
+          <div className={`p-3 rounded-full ${getAreaLightColor()} mr-4`}>
+            <Users size={20} />
+          </div>
+          <div>
+            <p className="text-sm text-gray-500">Empleados</p>
+            <p className="text-xl font-semibold">{stats.employees}</p>
+          </div>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, delay: 0.2 }}
+          className={`p-4 bg-white rounded-lg shadow-sm border ${getAreaBorderColor()} flex items-center`}
+        >
+          <div className={`p-3 rounded-full ${getAreaLightColor()} mr-4`}>
+            <Calendar size={20} />
+          </div>
+          <div>
+            <p className="text-sm text-gray-500">Fechas</p>
+            <p className="text-xl font-semibold">{stats.dates}</p>
+          </div>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, delay: 0.3 }}
+          className={`p-4 bg-white rounded-lg shadow-sm border ${getAreaBorderColor()} flex items-center`}
+        >
+          <div className={`p-3 rounded-full ${getAreaLightColor()} mr-4`}>
+            <Clock size={20} />
+          </div>
+          <div>
+            <p className="text-sm text-gray-500">Turnos</p>
+            <p className="text-xl font-semibold">{stats.shifts}</p>
+          </div>
+        </motion.div>
+      </div>
+
       <div className="mb-4 flex justify-end">
-        <button
+        <motion.button
           onClick={handleSaveToDatabase}
           disabled={isSaving}
-          className={`flex items-center px-4 py-2 ${getButtonColor()} text-white rounded-lg shadow-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed`}
+          whileHover={{ scale: 1.03 }}
+          whileTap={{ scale: 0.97 }}
+          className={`flex items-center px-6 py-3 ${getButtonColor()} text-white rounded-lg shadow-md transition-all disabled:opacity-50 disabled:cursor-not-allowed`}
         >
           {isSaving ? (
             <>
@@ -639,76 +657,67 @@ const DataTable: React.FC<DataTableProps> = ({ data, selectedArea, onBack }) => 
               <span>Guardar en la base de datos</span>
             </>
           )}
-        </button>
+        </motion.button>
       </div>
 
-      {sqlServerError && (
-        <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3 }}
-          className="mb-4 p-4 rounded-lg shadow-md border bg-amber-50 border-amber-200 text-amber-800"
-        >
-          <div className="flex items-center">
-            <AlertTriangle size={20} className="text-amber-600 mr-2 flex-shrink-0" />
-            <span>{sqlServerError}</span>
-          </div>
-        </motion.div>
-      )}
-
-      {mysqlError && (
-        <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3 }}
-          className="mb-4 p-4 rounded-lg shadow-md border bg-amber-50 border-amber-200 text-amber-800"
-        >
-          <div className="flex items-center">
-            <AlertTriangle size={20} className="text-amber-600 mr-2 flex-shrink-0" />
-            <span>{mysqlError}</span>
-          </div>
-        </motion.div>
-      )}
-
-      {saveStatus && (
-        <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3 }}
-          className={`mb-4 p-4 rounded-lg shadow-md border ${
-            saveStatus === 'success' 
-              ? 'bg-green-50 border-green-200 text-green-800' 
-              : 'bg-red-50 border-red-200 text-red-800'
-          }`}
-        >
-          <div className="flex items-center">
-            {saveStatus === 'success' ? (
-              <Check size={20} className="text-green-600 mr-2" />
-            ) : (
-              <AlertCircle size={20} className="text-red-600 mr-2" />
-            )}
-            <span>{statusMessage}</span>
-          </div>
-        </motion.div>
-      )}
-
-      {debugInfo && (
-        <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3 }}
-          className="mb-4 p-4 rounded-lg shadow-md border bg-gray-50 border-gray-200 text-gray-800 font-mono text-xs overflow-auto max-h-60"
-        >
-          <div className="flex items-start">
-            <div className="flex-1">
-              <h4 className="font-medium text-gray-700 mb-2">Información de depuración:</h4>
-              <pre className="whitespace-pre-wrap">{debugInfo}</pre>
+      <div ref={tableRef}>
+        {sqlServerError && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3 }}
+            className="mb-4 p-4 rounded-lg shadow-md border bg-amber-50 border-amber-200 text-amber-800"
+          >
+            <div className="flex items-center">
+              <AlertTriangle size={20} className="text-amber-600 mr-2 flex-shrink-0" />
+              <span>{sqlServerError}</span>
             </div>
-          </div>
-        </motion.div>
-      )}
+          </motion.div>
+        )}
 
-      <div className="overflow-x-auto bg-white rounded-xl shadow-lg border border-gray-200">
+        {mysqlError && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3 }}
+            className="mb-4 p-4 rounded-lg shadow-md border bg-amber-50 border-amber-200 text-amber-800"
+          >
+            <div className="flex items-center">
+              <AlertTriangle size={20} className="text-amber-600 mr-2 flex-shrink-0" />
+              <span>{mysqlError}</span>
+            </div>
+          </motion.div>
+        )}
+
+        {saveStatus && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3 }}
+            className={`mb-4 p-4 rounded-lg shadow-md border ${
+              saveStatus === "success"
+                ? "bg-green-50 border-green-200 text-green-800"
+                : "bg-red-50 border-red-200 text-red-800"
+            }`}
+          >
+            <div className="flex items-center">
+              {saveStatus === "success" ? (
+                <Check size={20} className="text-green-600 mr-2 flex-shrink-0" />
+              ) : (
+                <AlertCircle size={20} className="text-red-600 mr-2 flex-shrink-0" />
+              )}
+              <span className="font-medium">{statusMessage}</span>
+            </div>
+          </motion.div>
+        )}
+      </div>
+
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
+        className="overflow-hidden bg-white rounded-xl shadow-lg border border-gray-200"
+      >
         <div className="max-h-[500px] overflow-y-auto">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className={`${getAreaColor()} text-white sticky top-0 z-10`}>
@@ -730,29 +739,26 @@ const DataTable: React.FC<DataTableProps> = ({ data, selectedArea, onBack }) => 
                   key={rowIndex}
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.3, delay: rowIndex * 0.02 }}
-                  className={`${rowIndex % 2 === 0 ? 'bg-white' : getAreaLightColor()} ${getAreaHoverColor()} transition-colors`}
-                 >
+                  transition={{ duration: 0.3, delay: rowIndex * 0.01 }}
+                  className={`${rowIndex % 2 === 0 ? "bg-white" : getAreaLightColor()} ${getAreaHoverColor()} transition-colors`}
+                >
                   {row.map((cell, cellIndex) => (
-                    <td
-                      key={cellIndex}
-                      className="px-6 py-4 whitespace-nowrap text-sm text-gray-700"
-                    >
-                      {cell?.toString() || ''}
+                    <td key={cellIndex} className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                      {cell?.toString() || ""}
                     </td>
                   ))}
                 </motion.tr>
               ))}
             </tbody>
           </table>
-          
+
           {filteredData.rows.length > 100 && (
             <div className="bg-gray-50 px-6 py-3 text-center text-sm text-gray-500 border-t border-gray-200">
               Mostrando 100 de {filteredData.rows.length} filas
             </div>
           )}
         </div>
-      </div>
+      </motion.div>
 
       <motion.div
         initial={{ opacity: 0 }}
@@ -763,8 +769,8 @@ const DataTable: React.FC<DataTableProps> = ({ data, selectedArea, onBack }) => 
         <p>Sistema Alimentador Oriental 6</p>
       </motion.div>
     </motion.div>
-  );
-};
+  )
+}
 
-export default DataTable;
+export default DataTable
 
