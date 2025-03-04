@@ -15,6 +15,7 @@ export interface AreaOption {
   icon: string;
   description: string;
   color: string;
+  password: string
 }
 
 export interface DatabaseRecord {

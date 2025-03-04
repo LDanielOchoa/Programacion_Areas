@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ExcelData, AreaType } from '../types';
 import { ArrowLeft, Save, Check, AlertCircle, AlertTriangle } from 'lucide-react';
@@ -28,6 +28,18 @@ const DataTable: React.FC<DataTableProps> = ({ data, selectedArea, onBack }) => 
   const [preparedRecords, setPreparedRecords] = useState<any[]>([]);
   const [sqlServerError, setSqlServerError] = useState<string | null>(null);
   const [mysqlError, setMysqlError] = useState<string | null>(null);
+  const [debugInfo, setDebugInfo] = useState<string | null>(null);
+
+  // Debug effect to log data changes
+  useEffect(() => {
+    if (data) {
+      console.log('[DEBUG] Excel Data Structure:', {
+        headers: data.headers,
+        rowCount: data.rows.length,
+        sampleRow: data.rows[0]
+      });
+    }
+  }, [data]);
 
   if (!data || !data.headers.length) {
     return null;
@@ -85,6 +97,7 @@ const DataTable: React.FC<DataTableProps> = ({ data, selectedArea, onBack }) => 
   const hasMetadata = data.rows[0] && data.rows[0][0] === 'Responsable:';
   const metadata = hasMetadata ? data.rows[0] : null;
   const displayRows = hasMetadata ? data.rows.slice(1) : data.rows;
+  
 
   // Extract date range from metadata
   const dateRange = metadata ? metadata[3] : '';
@@ -101,31 +114,86 @@ const DataTable: React.FC<DataTableProps> = ({ data, selectedArea, onBack }) => 
     return startDay <= 15 ? 'Primera' : 'Segunda';
   };
 
+  // Filter out empty columns from the data
+  const filterEmptyColumns = () => {
+    if (!data || !data.headers.length) return { headers: [], rows: [] };
+    
+    // Find columns that have data
+    const nonEmptyColumnIndexes: number[] = [];
+    
+    // Check each column
+    for (let colIndex = 0; colIndex < data.headers.length; colIndex++) {
+      // Check if header exists
+      if (data.headers[colIndex]) {
+        // Check if any row has data in this column
+        const hasData = displayRows.some(row => {
+          return row[colIndex] !== undefined && row[colIndex] !== null && row[colIndex] !== '';
+        });
+        
+        if (hasData || colIndex < 4) { // Always keep the first 4 columns (ID, CEDULA, NOMBRE, CARGO)
+          nonEmptyColumnIndexes.push(colIndex);
+        }
+      }
+    }
+    
+    // Filter headers
+    const filteredHeaders = nonEmptyColumnIndexes.map(index => data.headers[index]);
+    
+    // Filter rows
+    const filteredRows = displayRows.map(row => {
+      return nonEmptyColumnIndexes.map(index => row[index]);
+    });
+    
+    return { headers: filteredHeaders, rows: filteredRows };
+  };
+  
+  // Get filtered data
+  const filteredData = filterEmptyColumns();
+
   const continueWithSave = async () => {
-    if (!preparedRecords.length) return;
+    if (!preparedRecords.length) {
+      console.error('[DEBUG] No records to save!');
+      setDebugInfo('Error: No hay registros preparados para guardar');
+      return;
+    }
     
     setShowDateExistModal(false);
     setAnimationStage('saving');
     setShowAnimation(true);
+    setDebugInfo(null);
     
     try {
       // Wait for animation
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      
+      console.log('[DEBUG] Records to save:', preparedRecords);
+      setDebugInfo(`Iniciando guardado de ${preparedRecords.length} registros...`);
       
       // Save to database
-      await saveToDatabase(preparedRecords);
+      const result = await saveToDatabase(preparedRecords);
+      
+      console.log('[DEBUG] Save result:', result);
+      setDebugInfo(prev => `${prev}\nGuardado completado. Respuesta: ${JSON.stringify(result)}`);
       
       // Keep animation visible for a bit longer after saving
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await new Promise(resolve => setTimeout(resolve, 800));
       
       setShowAnimation(false);
       setSaveStatus('success');
       setStatusMessage(`${preparedRecords.length} registros guardados correctamente en la base de datos`);
     } catch (error: any) {
-      console.error('Error saving to database:', error);
+      console.error('[DEBUG] Save error:', error);
       setShowAnimation(false);
       
-      // Check if it's a development mode simulation
+      let errorDetails = `Error: ${error.message}`;
+      if (error.response) {
+        errorDetails += `\nStatus: ${error.response.status}`;
+        errorDetails += `\nData: ${JSON.stringify(error.response.data)}`;
+      } else if (error.request) {
+        errorDetails += `\nNo se recibió respuesta del servidor`;
+      }
+      setDebugInfo(errorDetails);
+      
       if (error.response?.data?.message?.includes('development mode')) {
         setSaveStatus('success');
         setStatusMessage(`${preparedRecords.length} registros guardados correctamente (modo desarrollo)`);
@@ -138,6 +206,72 @@ const DataTable: React.FC<DataTableProps> = ({ data, selectedArea, onBack }) => 
     }
   };
 
+  // Función para convertir fechas de formato "DD-MMM" a "YYYY-MM-DD"
+  const formatDateForDatabase = (dateHeader: any): string => {
+    console.log('[DEBUG] Formatting date:', dateHeader);
+    
+    if (dateHeader instanceof Date) {
+      const formatted = dateHeader.toISOString().split('T')[0];
+      console.log('[DEBUG] Date object formatted:', formatted);
+      return formatted;
+    } 
+    
+    if (typeof dateHeader === 'string') {
+      // Si ya está en formato YYYY-MM-DD
+      if (/^\d{4}-\d{2}-\d{2}/.test(dateHeader)) {
+        const formatted = dateHeader.split('T')[0];
+        console.log('[DEBUG] Already in YYYY-MM-DD format:', formatted);
+        return formatted;
+      }
+      
+      // Si está en formato DD-MMM (ej: "17-Feb")
+      if (/^\d{1,2}-[A-Za-z]{3}$/.test(dateHeader)) {
+        const parts = dateHeader.split('-');
+        if (parts.length === 2) {
+          const day = parts[0].trim().padStart(2, '0');
+          const month = parts[1].trim();
+          
+          // Mapeo de nombres de mes a números
+          const monthMap: {[key: string]: string} = {
+            'Jan': '01', 'Feb': '02', 'Mar': '03', 'Apr': '04', 'May': '05', 'Jun': '06',
+            'Jul': '07', 'Aug': '08', 'Sep': '09', 'Oct': '10', 'Nov': '11', 'Dec': '12',
+            'Ene': '01', 'Feb': '02', 'Mar': '03', 'Abr': '04', 'May': '05', 'Jun': '06',
+            'Jul': '07', 'Ago': '08', 'Sep': '09', 'Oct': '10', 'Nov': '11', 'Dic': '12'
+          };
+          
+          let monthNum = '01';
+          for (const [key, value] of Object.entries(monthMap)) {
+            if (month.includes(key)) {
+              monthNum = value;
+              break;
+            }
+          }
+          
+          // Usar el año actual
+          const currentYear = new Date().getFullYear();
+          const formatted = `${currentYear}-${monthNum}-${day}`;
+          console.log('[DEBUG] DD-MMM format converted:', formatted);
+          return formatted;
+        }
+      }
+      
+      // Intentar parsear como fecha
+      try {
+        const date = new Date(dateHeader);
+        if (!isNaN(date.getTime())) {
+          const formatted = date.toISOString().split('T')[0];
+          console.log('[DEBUG] Parsed as Date object:', formatted);
+          return formatted;
+        }
+      } catch (e) {
+        console.error('[DEBUG] Error parsing date:', e);
+      }
+    }
+    
+    console.log('[DEBUG] Using original date string:', dateHeader);
+    return String(dateHeader);
+  };
+
   const handleSaveToDatabase = async () => {
     if (!data || isSaving) return;
     
@@ -146,6 +280,7 @@ const DataTable: React.FC<DataTableProps> = ({ data, selectedArea, onBack }) => 
     setStatusMessage('');
     setSqlServerError(null);
     setMysqlError(null);
+    setDebugInfo(null);
     
     try {
       // Prepare data for database
@@ -153,7 +288,8 @@ const DataTable: React.FC<DataTableProps> = ({ data, selectedArea, onBack }) => 
       const quincena = getQuincena();
       
       // Get date headers (assuming they are in positions 4-10)
-      const dateHeaders = data.headers.slice(4);
+      const dateHeaders = data.headers.slice(4); // Requiere al menos 5 columnas
+      console.log('[DEBUG] Date headers:', dateHeaders);
       
       // Prepare records for database
       const records = [];
@@ -161,11 +297,31 @@ const DataTable: React.FC<DataTableProps> = ({ data, selectedArea, onBack }) => 
       // Extract unique employees for validation
       const uniqueEmployees = new Map();
       
+      console.log('[DEBUG] Starting record preparation');
+      setDebugInfo('Preparando registros para guardar...');
+      
       for (const row of displayRows) {
+        console.log('[DEBUG] Fila completa:', row);
         const cedula = row[1]; // Column B - Cédula
         const nombre = row[2]; // Column C - Nombre
         const area = selectedArea;
         const clasificacion = row[3]; // Column D - Cargo
+        console.log('[DEBUG] displayRows:', displayRows);
+        console.log('[DEBUG] Number of date headers:', dateHeaders.length);
+        console.log('[DEBUG] displayRows:', displayRows);
+        console.log('[DEBUG] Number of date headers:', dateHeaders.length);
+        console.log('[DEBUG] Processing row:', {
+          cedula,
+          nombre,
+          area,
+          clasificacion
+        });
+        
+        // Validar que la cédula sea un valor válido
+        if (!cedula) {
+          console.log('[DEBUG] Skipping row - no cedula');
+          continue;
+        }
         
         // Add to unique employees map
         if (cedula && !uniqueEmployees.has(cedula.toString())) {
@@ -178,28 +334,53 @@ const DataTable: React.FC<DataTableProps> = ({ data, selectedArea, onBack }) => 
           const horario = row[i + 4]; // Shift for this date (columns E-K)
           
           if (horario) {
+            console.log('[DEBUG] Processing schedule:', {
+              date: dateHeader,
+              horario
+            });
+            
             // Calculate tiempo a descontar if needed
             const tiempoDescontar = horario.toString().toUpperCase() === 'DESCANSO' || 
                                    horario.toString().toUpperCase() === 'VACACIONES' ? 
                                    0 : 8; // Default to 8 hours for regular shifts
             
-            records.push({
+            // Formatear la fecha para la base de datos
+            const fechaProgramacion = formatDateForDatabase(dateHeader);
+            
+            const record = {
               CEDULA: cedula,
-              // Ensure Fecha_programacion is a string for TEXT field
-              Fecha_programacion: typeof dateHeader === 'object' 
-                ? dateHeader.toISOString().split('T')[0] 
-                : dateHeader,
+              Fecha_programacion: fechaProgramacion,
               Horario_programacion: horario,
               Area: area,
               Tiempo_a_descontar: tiempoDescontar,
               Quincena: quincena,
-              clasificacion: clasificacion,
-              // Ensure fecha_consulta is a string for TEXT field
+              clasificacion: clasificacion || 'No especificado',
               fecha_consulta: currentDate.toISOString()
-            });
+            };
+            
+            for (let i = 0; i < dateHeaders.length; i++) {
+              const horario = row[i + 4];
+              console.log(`[DEBUG] Celda de horario (col ${i + 4}):`, horario); // <- ¡Esto es crítico!
+            }
+
+            console.log('[DEBUG] Created record:', record);
+            records.push(record);
           }
         }
       }
+      
+      // Verificar que haya registros para guardar
+      if (records.length === 0) {
+        console.error('[DEBUG] No valid records found');
+        setIsSaving(false);
+        setSaveStatus('error');
+        setStatusMessage('No hay datos válidos para guardar en la base de datos');
+        setDebugInfo('Error: No hay datos válidos para guardar');
+        return;
+      }
+      
+      console.log('[DEBUG] Total records prepared:', records.length);
+      setDebugInfo(prev => `${prev}\nRegistros preparados: ${records.length}`);
       
       setRecordCount(records.length);
       setPreparedRecords(records);
@@ -213,50 +394,66 @@ const DataTable: React.FC<DataTableProps> = ({ data, selectedArea, onBack }) => 
           nombre: nombre as string
         }));
         
+        console.log('[DEBUG] Employees to validate:', employeesToValidate);
+        setDebugInfo(prev => `${prev}\nValidando ${employeesToValidate.length} empleados...`);
+        
         // Wait for validation animation to show
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        await new Promise(resolve => setTimeout(resolve, 1500));
         
         const validationResult = await validateEmployeesInSQLServer(
           employeesToValidate.map(e => e.cedula),
           employeesToValidate.map(e => e.nombre)
         );
         
+        console.log('[DEBUG] Employee validation result:', validationResult);
+        setDebugInfo(prev => `${prev}\nResultado de validación: ${JSON.stringify(validationResult)}`);
+        
         if (!validationResult.isValid) {
           setShowAnimation(false);
           setInvalidEmployees(validationResult.invalidEmployees);
-          setShowValidationModal(true);
+          setShowValidationModal(true);  
           setIsSaving(false);
-          return;
+          return;  
         }
         
         // Continue with checking dates if employee validation passed
         setAnimationStage('transferring');
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        await new Promise(resolve => setTimeout(resolve, 1500));
         
         // Check if dates already exist in the database
         try {
-          // Format dates as strings for TEXT fields
-          const uniqueDates = [...new Set(dateHeaders.map(date => {
-            if (typeof date === 'object' && date instanceof Date) {
-              return date.toISOString().split('T')[0];
-            }
-            return date.toString();
-          }))];
+          // Extract unique dates from date headers and format them properly
+          const uniqueDates = [...new Set(dateHeaders.map(date => formatDateForDatabase(date)))];
+          
+          console.log('[DEBUG] Dates to check:', uniqueDates);
+          setDebugInfo(prev => `${prev}\nVerificando ${uniqueDates.length} fechas...`);
           
           const dateCheckResult = await checkDatesExist(uniqueDates, selectedArea);
+          
+          console.log('[DEBUG] Date check result:', dateCheckResult);
+          setDebugInfo(prev => `${prev}\nResultado de verificación de fechas: ${JSON.stringify(dateCheckResult)}`);
           
           if (dateCheckResult.exists && dateCheckResult.existingDates.length > 0) {
             setShowAnimation(false);
             setExistingDates(dateCheckResult.existingDates);
-            setShowDateExistModal(true);
-            return;
+            setShowDateExistModal(true);  
+            return;  
           }
           
           // If no dates exist, continue with saving
           await continueWithSave();
         } catch (dateError: any) {
-          console.error('Error checking dates:', dateError);
+          console.error('[DEBUG] Date check error:', dateError);
           setShowAnimation(false);
+          
+          let errorDetails = `Error al verificar fechas: ${dateError.message}`;
+          if (dateError.response) {
+            errorDetails += `\nStatus: ${dateError.response.status}`;
+            errorDetails += `\nData: ${JSON.stringify(dateError.response.data)}`;
+          } else if (dateError.request) {
+            errorDetails += `\nNo se recibió respuesta del servidor`;
+          }
+          setDebugInfo(errorDetails);
           
           if (dateError.response?.status === 500) {
             setMysqlError('No se pudo verificar las fechas en la base de datos. Continuando en modo de desarrollo.');
@@ -269,8 +466,17 @@ const DataTable: React.FC<DataTableProps> = ({ data, selectedArea, onBack }) => 
         }
         
       } catch (error: any) {
-        console.error('Error validating employees:', error);
+        console.error('[DEBUG] Employee validation error:', error);
         setShowAnimation(false);
+        
+        let errorDetails = `Error al validar empleados: ${error.message}`;
+        if (error.response) {
+          errorDetails += `\nStatus: ${error.response.status}`;
+          errorDetails += `\nData: ${JSON.stringify(error.response.data)}`;
+        } else if (error.request) {
+          errorDetails += `\nNo se recibió respuesta del servidor`;
+        }
+        setDebugInfo(errorDetails);
         
         // Check if it's a SQL Server connection error
         if (error.response?.data?.details?.includes('Failed to connect')) {
@@ -280,19 +486,20 @@ const DataTable: React.FC<DataTableProps> = ({ data, selectedArea, onBack }) => 
           setAnimationStage('transferring');
           setShowAnimation(true);
           
-          await new Promise(resolve => setTimeout(resolve, 2000));
+          await new Promise(resolve => setTimeout(resolve, 1500));
           
           // Check if dates already exist in the database
           try {
-            // Format dates as strings for TEXT fields
-            const uniqueDates = [...new Set(dateHeaders.map(date => {
-              if (typeof date === 'object' && date instanceof Date) {
-                return date.toISOString().split('T')[0];
-              }
-              return date.toString();
-            }))];
+            // Extract unique dates from date headers and format them properly
+            const uniqueDates = [...new Set(dateHeaders.map(date => formatDateForDatabase(date)))];
+            
+            console.log('[DEBUG] Checking dates after SQL error:', uniqueDates);
+            setDebugInfo(prev => `${prev}\nVerificando ${uniqueDates.length} fechas (después de error SQL)...`);
             
             const dateCheckResult = await checkDatesExist(uniqueDates, selectedArea);
+            
+            console.log('[DEBUG] Date check result:', dateCheckResult);
+            setDebugInfo(prev => `${prev}\nResultado de verificación de fechas: ${JSON.stringify(dateCheckResult)}`);
             
             if (dateCheckResult.exists && dateCheckResult.existingDates.length > 0) {
               setShowAnimation(false);
@@ -300,12 +507,23 @@ const DataTable: React.FC<DataTableProps> = ({ data, selectedArea, onBack }) => 
               setShowDateExistModal(true);
               return;
             }
-            
+            console.log('[DEBUG] Records to save:', records);
+            // Y dentro de continueWithSave:
+            console.log('[DEBUG] Final records being sent:', preparedRecords);
             // If no dates exist, continue with saving
             await continueWithSave();
           } catch (dateError: any) {
-            console.error('Error checking dates:', dateError);
+            console.error('[DEBUG] Date check error after SQL error:', dateError);
             setShowAnimation(false);
+            
+            let errorDetails = `Error al verificar fechas (después de error SQL): ${dateError.message}`;
+            if (dateError.response) {
+              errorDetails += `\nStatus: ${dateError.response.status}`;
+              errorDetails += `\nData: ${JSON.stringify(dateError.response.data)}`;
+            } else if (dateError.request) {
+              errorDetails += `\nNo se recibió respuesta del servidor`;
+            }
+            setDebugInfo(errorDetails);
             
             if (dateError.response?.status === 500) {
               setMysqlError('No se pudo verificar las fechas en la base de datos. Continuando en modo de desarrollo.');
@@ -322,11 +540,15 @@ const DataTable: React.FC<DataTableProps> = ({ data, selectedArea, onBack }) => 
           setIsSaving(false);
         }
       }
-    } catch (error) {
-      console.error('Error saving to database:', error);
+    } catch (error: any) {
+      console.error('[DEBUG] General error:', error);
       setShowAnimation(false);
       setSaveStatus('error');
       setStatusMessage(error instanceof Error ? error.message : 'Error al guardar en la base de datos');
+      
+      let errorDetails = `Error general: ${error.message}`;
+      setDebugInfo(errorDetails);
+      
       setIsSaving(false);
     }
   };
@@ -470,12 +692,28 @@ const DataTable: React.FC<DataTableProps> = ({ data, selectedArea, onBack }) => 
         </motion.div>
       )}
 
+      {debugInfo && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3 }}
+          className="mb-4 p-4 rounded-lg shadow-md border bg-gray-50 border-gray-200 text-gray-800 font-mono text-xs overflow-auto max-h-60"
+        >
+          <div className="flex items-start">
+            <div className="flex-1">
+              <h4 className="font-medium text-gray-700 mb-2">Información de depuración:</h4>
+              <pre className="whitespace-pre-wrap">{debugInfo}</pre>
+            </div>
+          </div>
+        </motion.div>
+      )}
+
       <div className="overflow-x-auto bg-white rounded-xl shadow-lg border border-gray-200">
         <div className="max-h-[500px] overflow-y-auto">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className={`${getAreaColor()} text-white sticky top-0 z-10`}>
               <tr>
-                {data.headers.map((header, index) => (
+                {filteredData.headers.map((header, index) => (
                   <th
                     key={index}
                     scope="col"
@@ -487,14 +725,14 @@ const DataTable: React.FC<DataTableProps> = ({ data, selectedArea, onBack }) => 
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {displayRows.slice(0, 100).map((row, rowIndex) => (
+              {filteredData.rows.slice(0, 100).map((row, rowIndex) => (
                 <motion.tr
                   key={rowIndex}
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.3, delay: rowIndex * 0.02 }}
                   className={`${rowIndex % 2 === 0 ? 'bg-white' : getAreaLightColor()} ${getAreaHoverColor()} transition-colors`}
-                >
+                 >
                   {row.map((cell, cellIndex) => (
                     <td
                       key={cellIndex}
@@ -508,9 +746,9 @@ const DataTable: React.FC<DataTableProps> = ({ data, selectedArea, onBack }) => 
             </tbody>
           </table>
           
-          {displayRows.length > 100 && (
+          {filteredData.rows.length > 100 && (
             <div className="bg-gray-50 px-6 py-3 text-center text-sm text-gray-500 border-t border-gray-200">
-              Mostrando 100 de {displayRows.length} filas
+              Mostrando 100 de {filteredData.rows.length} filas
             </div>
           )}
         </div>
@@ -529,3 +767,4 @@ const DataTable: React.FC<DataTableProps> = ({ data, selectedArea, onBack }) => 
 };
 
 export default DataTable;
+

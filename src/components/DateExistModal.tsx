@@ -58,20 +58,6 @@ const DateExistModal: React.FC<DateExistModalProps> = ({
   // Format date to a more readable format
   const formatDate = (dateString: string) => {
     try {
-      // Check if it's a numeric Excel date
-      if (/^\d+$/.test(dateString)) {
-        // Convert Excel date to JS date
-        const excelDate = parseInt(dateString);
-        const jsDate = new Date((excelDate - (excelDate > 60 ? 1 : 0) - 25569) * 86400 * 1000);
-        return jsDate.toLocaleDateString('es-ES', {
-          weekday: 'long',
-          year: 'numeric',
-          month: 'long',
-          day: 'numeric'
-        });
-      }
-      
-      // Regular date string
       const date = new Date(dateString);
       return date.toLocaleDateString('es-ES', {
         weekday: 'long',
@@ -88,77 +74,89 @@ const DateExistModal: React.FC<DateExistModalProps> = ({
     <AnimatePresence>
       {isVisible && (
         <motion.div
-          className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+          className="fixed inset-0 z-50"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
         >
-          <motion.div
-            className="bg-white rounded-xl shadow-2xl max-w-3xl w-full mx-auto overflow-hidden"
-            initial={{ opacity: 0, y: 50, scale: 0.9 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 50, scale: 0.9 }}
-            transition={{ type: "spring", damping: 25, stiffness: 300 }}
-          >
-            <div className={`${getAreaColor()} text-white p-6 flex items-start justify-between`}>
-              <div className="flex items-center">
-                <AlertCircle size={28} className="mr-3" />
-                <div>
-                  <h3 className="text-xl font-bold">Fechas ya existentes</h3>
-                  <p className="text-white text-opacity-90">
-                    Las siguientes fechas ya existen en la base de datos para el área de {area}
-                  </p>
+          {/* Full screen backdrop with blur effect */}
+          <motion.div 
+            className="absolute inset-0 bg-black/60 backdrop-blur-md"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={onClose}
+          />
+          
+          <div className="absolute inset-0 flex items-center justify-center p-4">
+            <motion.div
+              className="bg-white rounded-xl shadow-2xl max-w-3xl w-full mx-auto overflow-hidden"
+              initial={{ opacity: 0, y: 50, scale: 0.9 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 50, scale: 0.9 }}
+              transition={{ type: "spring", damping: 25, stiffness: 300 }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className={`${getAreaColor()} text-white p-6 flex items-start justify-between`}>
+                <div className="flex items-center">
+                  <AlertCircle size={28} className="mr-3" />
+                  <div>
+                    <h3 className="text-xl font-bold">Fechas ya existentes</h3>
+                    <p className="text-white text-opacity-90">
+                      Las siguientes fechas ya existen en la base de datos para el área de {area}
+                    </p>
+                  </div>
+                </div>
+                <button 
+                  onClick={onClose}
+                  className="text-white text-opacity-80 hover:text-opacity-100 transition-colors"
+                >
+                  <X size={24} />
+                </button>
+              </div>
+              
+              <div className="p-6 max-h-[60vh] overflow-y-auto">
+                <p className="text-gray-700 mb-4">
+                  Se encontraron <span className="font-bold">{existingDates.length}</span> fechas que ya existen en la base de datos para esta área. 
+                  Si continúa, podría haber duplicación de datos.
+                </p>
+                
+                <div className="space-y-3">
+                  {existingDates.map((date, index) => (
+                    <motion.div
+                      key={index}
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: index * 0.05 }}
+                      className={`${getAreaLightColor()} p-4 rounded-lg border flex items-center`}
+                    >
+                      <div className="bg-white p-2 rounded-full mr-3">
+                        <Calendar size={20} className="text-red-500" />
+                      </div>
+                      <div>
+                        <div className="font-medium">{formatDate(date)}</div>
+                      </div>
+                    </motion.div>
+                  ))}
                 </div>
               </div>
-              <button 
-                onClick={onClose}
-                className="text-white text-opacity-80 hover:text-opacity-100 transition-colors"
-              >
-                <X size={24} />
-              </button>
-            </div>
-            
-            <div className="p-6 max-h-[60vh] overflow-y-auto">
-              <p className="text-gray-700 mb-4">
-                Se encontraron <span className="font-bold">{existingDates.length}</span> fechas que ya existen en la base de datos para esta área. 
-                Si continúa, podría haber duplicación de datos.
-              </p>
               
-              <div className="space-y-3">
-                {existingDates.map((date, index) => (
-                  <motion.div
-                    key={index}
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: index * 0.05 }}
-                    className={`${getAreaLightColor()} p-4 rounded-lg border flex items-center`}
-                  >
-                    <div className="bg-white p-2 rounded-full mr-3">
-                      <Calendar size={20} className="text-red-500" />
-                    </div>
-                    <div>
-                      <div className="font-medium">{formatDate(date)}</div>
-                    </div>
-                  </motion.div>
-                ))}
+              <div className="bg-gray-50 p-4 flex justify-end border-t space-x-3">
+                <button
+                  onClick={onClose}
+                  className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg shadow-md transition-colors hover:bg-gray-300"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={onProceed}
+                  className={`px-4 py-2 ${getButtonColor()} text-white rounded-lg shadow-md transition-colors`}
+                >
+                  Continuar de todos modos
+                </button>
               </div>
-            </div>
-            
-            <div className="bg-gray-50 p-4 flex justify-end border-t space-x-3">
-              <button
-                onClick={onClose}
-                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg shadow-md transition-colors hover:bg-gray-300"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={onProceed}
-                className={`px-4 py-2 ${getButtonColor()} text-white rounded-lg shadow-md transition-colors`}
-              >
-                Continuar de todos modos
-              </button>
-            </div>
-          </motion.div>
+            </motion.div>
+          </div>
         </motion.div>
       )}
     </AnimatePresence>

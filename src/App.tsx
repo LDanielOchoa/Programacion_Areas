@@ -1,9 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FileUploader, DataTable, Header, StatsCard, WelcomeScreen } from './components';
 import { parseExcelFile } from './utils/excelParser';
 import { ExcelData, AreaType } from './types';
 import { Loader2, AlertTriangle } from 'lucide-react';
+import { ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 
 function App() {
   const [excelData, setExcelData] = useState<ExcelData | null>(null);
@@ -12,6 +14,35 @@ function App() {
   const [error, setError] = useState<string | null>(null);
   const [selectedArea, setSelectedArea] = useState<AreaType | null>(null);
   const [step, setStep] = useState<'welcome' | 'upload' | 'results'>('welcome');
+  const [theme, setTheme] = useState<string>('green');
+
+  // Set theme based on selected area
+  useEffect(() => {
+    if (selectedArea) {
+      switch (selectedArea) {
+        case 'Operaciones':
+          setTheme('blue');
+          break;
+        case 'Lavado':
+          setTheme('cyan');
+          break;
+        case 'Mantenimiento':
+          setTheme('amber');
+          break;
+        case 'Remanofactura':
+          setTheme('emerald');
+          break;
+        case 'ServiciosGenerales':
+          setTheme('purple');
+          break;
+        case 'Vigilantes':
+          setTheme('red');
+          break;
+        default:
+          setTheme('green');
+      }
+    }
+  }, [selectedArea]);
 
   const handleSelectArea = (area: string) => {
     setSelectedArea(area as AreaType);
@@ -66,9 +97,29 @@ function App() {
     duration: 0.5
   };
 
+  // Get theme-specific gradient
+  const getThemeGradient = () => {
+    switch (theme) {
+      case 'blue':
+        return 'from-blue-600 to-blue-500';
+      case 'cyan':
+        return 'from-cyan-600 to-cyan-500';
+      case 'amber':
+        return 'from-amber-600 to-amber-500';
+      case 'emerald':
+        return 'from-emerald-600 to-emerald-500';
+      case 'purple':
+        return 'from-purple-600 to-purple-500';
+      case 'red':
+        return 'from-red-600 to-red-500';
+      default:
+        return 'from-green-600 to-emerald-500';
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-gradient-to-b from-green-50 to-white flex flex-col">
-      <Header />
+    <div className={`min-h-screen bg-gradient-to-b from-${theme}-50 to-white flex flex-col`}>
+      <ToastContainer position="top-right" autoClose={5000} />
       
       <main className="flex-1 container mx-auto px-4 py-8">
         <AnimatePresence mode="wait">
@@ -110,7 +161,7 @@ function App() {
                     transition={{ type: "spring", stiffness: 500, damping: 30 }}
                     className="flex justify-center mt-8"
                   >
-                    <div className="flex items-center space-x-3 text-green-600 bg-green-50 px-6 py-4 rounded-lg shadow-md">
+                    <div className={`flex items-center space-x-3 text-${theme}-600 bg-${theme}-50 px-6 py-4 rounded-lg shadow-md`}>
                       <Loader2 className="animate-spin" size={28} />
                       <span className="text-lg">Procesando archivo...</span>
                     </div>
@@ -173,10 +224,10 @@ function App() {
         </AnimatePresence>
       </main>
       
-      <footer className="bg-gradient-to-r from-green-600 to-emerald-500 py-6 text-white shadow-inner">
+      <footer className={`bg-gradient-to-r ${getThemeGradient()} py-6 text-white shadow-inner`}>
         <div className="container mx-auto px-4 text-center">
           <p className="font-medium">Sistema Alimentador Oriental 6 &copy; {new Date().getFullYear()}</p>
-          <p className="text-sm text-green-100 mt-1">Desarrollado con tecnología avanzada</p>
+          <p className="text-sm text-white/80 mt-1">Desarrollado con tecnología avanzada</p>
         </div>
       </footer>
     </div>

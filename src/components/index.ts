@@ -6,3 +6,4 @@ export { default as WelcomeScreen } from './WelcomeScreen';
 export { default as SaveAnimation } from './SaveAnimation';
 export { default as EmployeeValidationModal } from './EmployeeValidationModal';
 export { default as DateExistModal } from './DateExistModal';
+export { default as PasswordModal } from './PasswordModal';

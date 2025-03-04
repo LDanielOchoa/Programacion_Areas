@@ -8,6 +8,15 @@ interface EmployeeValidationResult {
   }[];
 }
 
+// Función para imprimir logs detallados
+const logDebug = (message: string, data?: any) => {
+  const timestamp = new Date().toISOString();
+  console.log(`[${timestamp}] [SQL_SERVER] ${message}`);
+  if (data) {
+    console.log('Datos:', data);
+  }
+};
+
 /**
  * Valida si las cédulas de los empleados existen en la base de datos SQL Server
  * @param cedulas Array de cédulas a validar
@@ -18,26 +27,55 @@ export const validateEmployeesInSQLServer = async (
   nombres: string[]
 ): Promise<EmployeeValidationResult> => {
   try {
+    logDebug(`Iniciando validación de ${cedulas.length} empleados`);
+    
+    // Validar parámetros de entrada
+    if (!cedulas || !Array.isArray(cedulas) || cedulas.length === 0) {
+      const error = 'No se proporcionaron cédulas para validar';
+      logDebug(`Error de validación: ${error}`);
+      throw new Error(error);
+    }
+    
+    if (!nombres || !Array.isArray(nombres) || nombres.length !== cedulas.length) {
+      const error = 'La lista de nombres no coincide con la lista de cédulas';
+      logDebug(`Error de validación: ${error}`);
+      throw new Error(error);
+    }
+    
     // Convertir a un formato adecuado para enviar al servidor
     const employeesToValidate = cedulas.map((cedula, index) => ({
       cedula,
       nombre: nombres[index] || 'Sin nombre'
     }));
 
-    // Use the same API_URL constant as in databaseService
-    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+    logDebug(`Muestra de empleados a validar:`, employeesToValidate.slice(0, 3));
+
+    // URL directa al API
+    const API_URL = 'http://localhost:3001/api';
     
-    const response = await axios.post(`${API_URL}/validate-employees`, {
+    // Agregar timestamp para evitar problemas de caché
+    const timestamp = new Date().getTime();
+    const url = `${API_URL}/validate-employees?t=${timestamp}`;
+    logDebug(`Enviando solicitud POST a: ${url}`);
+    
+    const response = await axios.post(url, {
       employees: employeesToValidate
+    }, {
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-cache'
+      },
+      timeout: 15000 // 15 segundos de timeout
     });
 
+    logDebug(`Respuesta de validación de empleados:`, response.data);
     return response.data;
   } catch (error: any) {
-    console.error('Error validando empleados en SQL Server:', error);
+    logDebug(`Error en validateEmployeesInSQLServer: ${error.message}`);
     
     // Check if it's a connection error
     if (error.response?.data?.details?.includes('Failed to connect')) {
-      console.warn('SQL Server connection failed - bypassing validation in development mode');
+      logDebug('SQL Server connection failed - bypassing validation in development mode');
       
       // In development mode, we'll bypass the validation
       // This allows testing without a working SQL Server connection
@@ -45,6 +83,13 @@ export const validateEmployeesInSQLServer = async (
         isValid: true,
         invalidEmployees: []
       };
+    }
+    
+    // Mejorar el mensaje de error
+    if (error.response) {
+      logDebug(`Error de respuesta: ${error.response.status}`, error.response.data);
+    } else if (error.request) {
+      logDebug('No se recibió respuesta del servidor al validar empleados');
     }
     
     // For other errors, return a default response to prevent the application from crashing

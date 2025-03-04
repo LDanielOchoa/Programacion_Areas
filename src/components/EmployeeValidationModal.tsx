@@ -60,72 +60,84 @@ const EmployeeValidationModal: React.FC<EmployeeValidationModalProps> = ({
     <AnimatePresence>
       {isVisible && (
         <motion.div
-          className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+          className="fixed inset-0 z-50"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
         >
-          <motion.div
-            className="bg-white rounded-xl shadow-2xl max-w-3xl w-full mx-auto overflow-hidden"
-            initial={{ opacity: 0, y: 50, scale: 0.9 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 50, scale: 0.9 }}
-            transition={{ type: "spring", damping: 25, stiffness: 300 }}
-          >
-            <div className={`${getAreaColor()} text-white p-6 flex items-start justify-between`}>
-              <div className="flex items-center">
-                <AlertTriangle size={28} className="mr-3" />
-                <div>
-                  <h3 className="text-xl font-bold">Empleados no encontrados</h3>
-                  <p className="text-white text-opacity-90">
-                    Los siguientes empleados no se encuentran en la base de datos activa
-                  </p>
+          {/* Full screen backdrop with blur effect */}
+          <motion.div 
+            className="absolute inset-0 bg-black/60 backdrop-blur-md"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={onClose}
+          />
+          
+          <div className="absolute inset-0 flex items-center justify-center p-4">
+            <motion.div
+              className="bg-white rounded-xl shadow-2xl max-w-3xl w-full mx-auto overflow-hidden"
+              initial={{ opacity: 0, y: 50, scale: 0.9 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 50, scale: 0.9 }}
+              transition={{ type: "spring", damping: 25, stiffness: 300 }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className={`${getAreaColor()} text-white p-6 flex items-start justify-between`}>
+                <div className="flex items-center">
+                  <AlertTriangle size={28} className="mr-3" />
+                  <div>
+                    <h3 className="text-xl font-bold">Empleados no encontrados</h3>
+                    <p className="text-white text-opacity-90">
+                      Los siguientes empleados no se encuentran en la base de datos activa
+                    </p>
+                  </div>
+                </div>
+                <button 
+                  onClick={onClose}
+                  className="text-white text-opacity-80 hover:text-opacity-100 transition-colors"
+                >
+                  <X size={24} />
+                </button>
+              </div>
+              
+              <div className="p-6 max-h-[60vh] overflow-y-auto">
+                <p className="text-gray-700 mb-4">
+                  Se encontraron <span className="font-bold">{invalidEmployees.length}</span> empleados que no existen en la base de datos o no están activos. 
+                  Por favor verifique la información antes de continuar.
+                </p>
+                
+                <div className="space-y-3">
+                  {invalidEmployees.map((employee, index) => (
+                    <motion.div
+                      key={index}
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: index * 0.05 }}
+                      className={`${getAreaLightColor()} p-4 rounded-lg border flex items-center`}
+                    >
+                      <div className="bg-white p-2 rounded-full mr-3">
+                        <UserX size={20} className="text-red-500" />
+                      </div>
+                      <div>
+                        <div className="font-medium">{employee.nombre}</div>
+                        <div className="text-sm opacity-80">Cédula: {employee.cedula}</div>
+                      </div>
+                    </motion.div>
+                  ))}
                 </div>
               </div>
-              <button 
-                onClick={onClose}
-                className="text-white text-opacity-80 hover:text-opacity-100 transition-colors"
-              >
-                <X size={24} />
-              </button>
-            </div>
-            
-            <div className="p-6 max-h-[60vh] overflow-y-auto">
-              <p className="text-gray-700 mb-4">
-                Se encontraron <span className="font-bold">{invalidEmployees.length}</span> empleados que no existen en la base de datos o no están activos. 
-                Por favor verifique la información antes de continuar.
-              </p>
               
-              <div className="space-y-3">
-                {invalidEmployees.map((employee, index) => (
-                  <motion.div
-                    key={index}
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: index * 0.05 }}
-                    className={`${getAreaLightColor()} p-4 rounded-lg border flex items-center`}
-                  >
-                    <div className="bg-white p-2 rounded-full mr-3">
-                      <UserX size={20} className="text-red-500" />
-                    </div>
-                    <div>
-                      <div className="font-medium">{employee.nombre}</div>
-                      <div className="text-sm opacity-80">Cédula: {employee.cedula}</div>
-                    </div>
-                  </motion.div>
-                ))}
+              <div className="bg-gray-50 p-4 flex justify-end border-t">
+                <button
+                  onClick={onClose}
+                  className={`px-4 py-2 ${getButtonColor()} text-white rounded-lg shadow-md transition-colors`}
+                >
+                  Entendido
+                </button>
               </div>
-            </div>
-            
-            <div className="bg-gray-50 p-4 flex justify-end border-t">
-              <button
-                onClick={onClose}
-                className={`px-4 py-2 ${getButtonColor()} text-white rounded-lg shadow-md transition-colors`}
-              >
-                Entendido
-              </button>
-            </div>
-          </motion.div>
+            </motion.div>
+          </div>
         </motion.div>
       )}
     </AnimatePresence>
