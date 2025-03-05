@@ -124,7 +124,15 @@ export const parseExcelFile = async (file: File): Promise<ExcelData> => {
                   typeof shift === 'string' && 
                   (shift.toUpperCase() === 'DESCANSO' || 
                    shift.toUpperCase() === 'VACACIONES' ||
-                   /^\d{1,2}:\d{2} - \d{1,2}:\d{2}$/.test(shift));
+                   shift.toUpperCase() === 'SUSPENSION' ||
+                   shift.toUpperCase() === 'LIC REM' ||
+                   shift.toUpperCase() === 'LIC NO REM' ||
+                   shift.toUpperCase() === 'INC ENF' ||
+                   shift.toUpperCase() === 'INC ACC' ||
+                   shift.toUpperCase() === 'CALAMIDAD' ||
+                   /^\d{1,2}:\d{2} - \d{1,2}:\d{2}$/.test(shift) ||
+                   /^(?:\d{1,2}:\d{2} - \d{1,2}:\d{2})(?: \/ (?:\d{1,2}:\d{2} - \d{1,2}:\d{2}))?$/);
+                   
                 
                 if (!isValidFormat) {
                   hasInvalidShift = true;

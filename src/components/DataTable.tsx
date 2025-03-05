@@ -4,7 +4,7 @@ import type React from "react"
 import { useState, useEffect, useRef } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import type { ExcelData, AreaType } from "../types"
-import { ArrowLeft, Save, Check, AlertCircle, AlertTriangle, Calendar, Users, Clock } from "lucide-react"
+import { ArrowLeft, Check, AlertCircle, AlertTriangle, Calendar, Users, Clock, Loader2, Database, Shield } from 'lucide-react'
 import { saveToDatabase, checkDatesExist } from "../utils/databaseService"
 import { validateEmployeesInSQLServer } from "../utils/sqlServerService"
 import SaveAnimation from "./SaveAnimation"
@@ -34,6 +34,9 @@ const DataTable: React.FC<DataTableProps> = ({ data, selectedArea, onBack }) => 
   const [mysqlError, setMysqlError] = useState<string | null>(null)
   const [debugInfo, setDebugInfo] = useState<string | null>(null)
   const tableRef = useRef<HTMLDivElement>(null)
+  const [isScrolling, setIsScrolling] = useState(false)
+  const [scrollProgress, setScrollProgress] = useState(0)
+  const tableContainerRef = useRef<HTMLDivElement>(null)
 
   // Debug effect to log data changes
   useEffect(() => {
@@ -53,6 +56,35 @@ const DataTable: React.FC<DataTableProps> = ({ data, selectedArea, onBack }) => 
     }
   }, [saveStatus])
 
+  // Handle scroll events for animation effects
+  useEffect(() => {
+    const handleScroll = () => {
+      if (tableContainerRef.current) {
+        const { scrollTop, scrollHeight, clientHeight } = tableContainerRef.current
+        const progress = scrollTop / (scrollHeight - clientHeight)
+        setScrollProgress(progress || 0)
+        setIsScrolling(true)
+        
+        // Reset scrolling state after scrolling stops
+        clearTimeout(window.scrollTimer)
+        window.scrollTimer = setTimeout(() => {
+          setIsScrolling(false)
+        }, 150) as unknown as number
+      }
+    }
+
+    const tableContainer = tableContainerRef.current
+    if (tableContainer) {
+      tableContainer.addEventListener('scroll', handleScroll)
+    }
+
+    return () => {
+      if (tableContainer) {
+        tableContainer.removeEventListener('scroll', handleScroll)
+      }
+    }
+  }, [])
+
   if (!data || !data.headers.length) {
     return null
   }
@@ -60,19 +92,19 @@ const DataTable: React.FC<DataTableProps> = ({ data, selectedArea, onBack }) => 
   const getAreaColor = () => {
     switch (selectedArea) {
       case "Operaciones":
-        return "bg-blue-500"
+        return "bg-blue-600"
       case "Lavado":
-        return "bg-cyan-500"
+        return "bg-cyan-600"
       case "Mantenimiento":
-        return "bg-amber-500"
+        return "bg-amber-600"
       case "Remanofactura":
-        return "bg-emerald-500"
+        return "bg-emerald-600"
       case "ServiciosGenerales":
-        return "bg-purple-500"
+        return "bg-purple-600"
       case "Vigilantes":
-        return "bg-red-500"
+        return "bg-red-600"
       default:
-        return "bg-green-500"
+        return "bg-green-600"
     }
   }
 
@@ -149,6 +181,25 @@ const DataTable: React.FC<DataTableProps> = ({ data, selectedArea, onBack }) => 
         return "border-red-200"
       default:
         return "border-green-200"
+    }
+  }
+
+  const getAreaGradient = () => {
+    switch (selectedArea) {
+      case "Operaciones":
+        return "from-blue-600 to-blue-700"
+      case "Lavado":
+        return "from-cyan-600 to-cyan-700"
+      case "Mantenimiento":
+        return "from-amber-600 to-amber-700"
+      case "Remanofactura":
+        return "from-emerald-600 to-emerald-700"
+      case "ServiciosGenerales":
+        return "from-purple-600 to-purple-700"
+      case "Vigilantes":
+        return "from-red-600 to-red-700"
+      default:
+        return "from-green-600 to-green-700"
     }
   }
 
@@ -373,7 +424,7 @@ const DataTable: React.FC<DataTableProps> = ({ data, selectedArea, onBack }) => 
             Fecha_programacion: formatDateForDatabase(dateHeaders[i]),
             Horario_programacion: horario,
             Area: selectedArea,
-            Tiempo_a_descontar: ["DESCANSO", "VACACIONES"].includes(horario.toString().toUpperCase()) ? 0 : 8,
+            Tiempo_a_descontar: ["DESCANSO", "VACACIONES", "SUSPENSION", "LIC REM", "LIC NO REM", "INC ENF", "INC ACC", "CALAMIDAD"].includes(horario.toString().toUpperCase()) ? 0 : 8,
             Quincena: quincena,
             clasificacion: row[3] || "No especificado",
             fecha_consulta: currentDate.toISOString(),
@@ -526,11 +577,46 @@ const DataTable: React.FC<DataTableProps> = ({ data, selectedArea, onBack }) => 
 
   const stats = calculateStats()
 
+  // Animation variants
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: { 
+      opacity: 1,
+      transition: { 
+        staggerChildren: 0.1,
+        delayChildren: 0.2
+      }
+    }
+  }
+
+  const itemVariants = {
+    hidden: { y: 20, opacity: 0 },
+    visible: { 
+      y: 0, 
+      opacity: 1,
+      transition: { type: "spring", stiffness: 100 }
+    }
+  }
+
+  const rowVariants = {
+    hidden: { opacity: 0, x: -10 },
+    visible: (i: number) => ({ 
+      opacity: 1, 
+      x: 0,
+      transition: { 
+        delay: i * 0.03,
+        type: "spring",
+        stiffness: 100,
+        damping: 15
+      }
+    })
+  }
+
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5, delay: 0.2 }}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.5 }}
       className="w-full mt-8"
     >
       <AnimatePresence>
@@ -562,20 +648,37 @@ const DataTable: React.FC<DataTableProps> = ({ data, selectedArea, onBack }) => 
         onProceed={continueWithSave}
       />
 
-      <div className="mb-6 flex items-center">
-        <button onClick={onBack} className="flex items-center text-gray-600 hover:text-green-700 transition-colors">
+      <motion.div 
+        className="mb-6 flex items-center"
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, type: "spring" }}
+      >
+        <motion.button 
+          onClick={onBack} 
+          className="flex items-center text-gray-600 hover:text-green-700 transition-colors"
+          whileHover={{ scale: 1.05, x: -5 }}
+          whileTap={{ scale: 0.95 }}
+        >
           <ArrowLeft size={18} className="mr-1" />
           <span>Volver a cargar archivo</span>
-        </button>
-        <h3 className="ml-auto text-lg font-semibold text-gray-700">Datos del área de {selectedArea}</h3>
-      </div>
+        </motion.button>
+        <motion.h3 
+          className={`ml-auto text-lg font-semibold ${getAreaColor()} bg-clip-text text-transparent`}
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ delay: 0.3, duration: 0.5 }}
+        >
+          Datos del área de {selectedArea}
+        </motion.h3>
+      </motion.div>
 
       {metadata && (
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3 }}
-          className={`mb-6 p-4 bg-white rounded-lg shadow-md border ${getAreaBorderColor()}`}
+          transition={{ duration: 0.5, type: "spring" }}
+          className={`mb-6 p-4 bg-white rounded-lg shadow-md border ${getAreaBorderColor()} backdrop-blur-sm bg-opacity-90`}
         >
           <div className="grid grid-cols-2 gap-4">
             <div className="flex items-center">
@@ -590,137 +693,117 @@ const DataTable: React.FC<DataTableProps> = ({ data, selectedArea, onBack }) => 
         </motion.div>
       )}
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, delay: 0.1 }}
-          className={`p-4 bg-white rounded-lg shadow-sm border ${getAreaBorderColor()} flex items-center`}
-        >
-          <div className={`p-3 rounded-full ${getAreaLightColor()} mr-4`}>
-            <Users size={20} />
-          </div>
-          <div>
-            <p className="text-sm text-gray-500">Empleados</p>
-            <p className="text-xl font-semibold">{stats.employees}</p>
-          </div>
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, delay: 0.2 }}
-          className={`p-4 bg-white rounded-lg shadow-sm border ${getAreaBorderColor()} flex items-center`}
-        >
-          <div className={`p-3 rounded-full ${getAreaLightColor()} mr-4`}>
-            <Calendar size={20} />
-          </div>
-          <div>
-            <p className="text-sm text-gray-500">Fechas</p>
-            <p className="text-xl font-semibold">{stats.dates}</p>
-          </div>
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, delay: 0.3 }}
-          className={`p-4 bg-white rounded-lg shadow-sm border ${getAreaBorderColor()} flex items-center`}
-        >
-          <div className={`p-3 rounded-full ${getAreaLightColor()} mr-4`}>
-            <Clock size={20} />
-          </div>
-          <div>
-            <p className="text-sm text-gray-500">Turnos</p>
-            <p className="text-xl font-semibold">{stats.shifts}</p>
-          </div>
-        </motion.div>
-      </div>
-
-      <div className="mb-4 flex justify-end">
+      <motion.div 
+        className="mb-4 flex justify-end"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.4, duration: 0.5 }}
+      >
         <motion.button
           onClick={handleSaveToDatabase}
           disabled={isSaving}
-          whileHover={{ scale: 1.03 }}
-          whileTap={{ scale: 0.97 }}
+          whileHover={{ scale: 1.05, boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)" }}
+          whileTap={{ scale: 0.95 }}
           className={`flex items-center px-6 py-3 ${getButtonColor()} text-white rounded-lg shadow-md transition-all disabled:opacity-50 disabled:cursor-not-allowed`}
         >
           {isSaving ? (
             <>
-              <div className="animate-spin mr-2 h-4 w-4 border-2 border-white border-t-transparent rounded-full"></div>
+              <Loader2 size={18} className="mr-2 animate-spin" />
               <span>Procesando...</span>
             </>
           ) : (
             <>
-              <Save size={18} className="mr-2" />
+              <Database size={18} className="mr-2" />
               <span>Guardar en la base de datos</span>
             </>
           )}
         </motion.button>
-      </div>
+      </motion.div>
 
       <div ref={tableRef}>
-        {sqlServerError && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3 }}
-            className="mb-4 p-4 rounded-lg shadow-md border bg-amber-50 border-amber-200 text-amber-800"
-          >
-            <div className="flex items-center">
-              <AlertTriangle size={20} className="text-amber-600 mr-2 flex-shrink-0" />
-              <span>{sqlServerError}</span>
-            </div>
-          </motion.div>
-        )}
+        <AnimatePresence>
+          {sqlServerError && (
+            <motion.div
+              initial={{ opacity: 0, y: -10, height: 0 }}
+              animate={{ opacity: 1, y: 0, height: "auto" }}
+              exit={{ opacity: 0, y: -10, height: 0 }}
+              transition={{ duration: 0.3 }}
+              className="mb-4 p-4 rounded-lg shadow-md border bg-amber-50 border-amber-200 text-amber-800"
+            >
+              <div className="flex items-center">
+                <AlertTriangle size={20} className="text-amber-600 mr-2 flex-shrink-0" />
+                <span>{sqlServerError}</span>
+              </div>
+            </motion.div>
+          )}
 
-        {mysqlError && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3 }}
-            className="mb-4 p-4 rounded-lg shadow-md border bg-amber-50 border-amber-200 text-amber-800"
-          >
-            <div className="flex items-center">
-              <AlertTriangle size={20} className="text-amber-600 mr-2 flex-shrink-0" />
-              <span>{mysqlError}</span>
-            </div>
-          </motion.div>
-        )}
+          {mysqlError && (
+            <motion.div
+              initial={{ opacity: 0, y: -10, height: 0 }}
+              animate={{ opacity: 1, y: 0, height: "auto" }}
+              exit={{ opacity: 0, y: -10, height: 0 }}
+              transition={{ duration: 0.3 }}
+              className="mb-4 p-4 rounded-lg shadow-md border bg-amber-50 border-amber-200 text-amber-800"
+            >
+              <div className="flex items-center">
+                <AlertTriangle size={20} className="text-amber-600 mr-2 flex-shrink-0" />
+                <span>{mysqlError}</span>
+              </div>
+            </motion.div>
+          )}
 
-        {saveStatus && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3 }}
-            className={`mb-4 p-4 rounded-lg shadow-md border ${
-              saveStatus === "success"
-                ? "bg-green-50 border-green-200 text-green-800"
-                : "bg-red-50 border-red-200 text-red-800"
-            }`}
-          >
-            <div className="flex items-center">
-              {saveStatus === "success" ? (
-                <Check size={20} className="text-green-600 mr-2 flex-shrink-0" />
-              ) : (
-                <AlertCircle size={20} className="text-red-600 mr-2 flex-shrink-0" />
-              )}
-              <span className="font-medium">{statusMessage}</span>
-            </div>
-          </motion.div>
-        )}
+          {saveStatus && (
+            <motion.div
+              initial={{ opacity: 0, y: -10, height: 0 }}
+              animate={{ opacity: 1, y: 0, height: "auto" }}
+              exit={{ opacity: 0, y: -10, height: 0 }}
+              transition={{ duration: 0.3 }}
+              className={`mb-4 p-4 rounded-lg shadow-md border ${
+                saveStatus === "success"
+                  ? "bg-green-50 border-green-200 text-green-800"
+                  : "bg-red-50 border-red-200 text-red-800"
+              }`}
+            >
+              <div className="flex items-center">
+                {saveStatus === "success" ? (
+                  <Check size={20} className="text-green-600 mr-2 flex-shrink-0" />
+                ) : (
+                  <AlertCircle size={20} className="text-red-600 mr-2 flex-shrink-0" />
+                )}
+                <span className="font-medium">{statusMessage}</span>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
+        transition={{ duration: 0.5, delay: 0.2 }}
         className="overflow-hidden bg-white rounded-xl shadow-lg border border-gray-200"
       >
-        <div className="max-h-[500px] overflow-y-auto">
+        <div 
+          ref={tableContainerRef}
+          className="max-h-[500px] overflow-y-auto relative"
+          style={{
+            scrollbarWidth: 'thin',
+            scrollbarColor: `var(--${selectedArea.toLowerCase()}-color) transparent`
+          }}
+        >
+          {/* Scroll indicator */}
+          <motion.div 
+            className={`absolute right-0 top-0 w-1 bg-gradient-to-b ${getAreaGradient()} opacity-70 z-20 rounded-r-md`}
+            initial={{ height: "0%" }}
+            animate={{ 
+              height: `${scrollProgress * 100}%`,
+              opacity: isScrolling ? 0.7 : 0.3
+            }}
+            transition={{ duration: 0.1 }}
+          />
+
           <table className="min-w-full divide-y divide-gray-200">
-            <thead className={`${getAreaColor()} text-white sticky top-0 z-10`}>
+            <thead className={`bg-gradient-to-r ${getAreaGradient()} text-white sticky top-0 z-10`}>
               <tr>
                 {filteredData.headers.map((header, index) => (
                   <th
@@ -734,28 +817,36 @@ const DataTable: React.FC<DataTableProps> = ({ data, selectedArea, onBack }) => 
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {filteredData.rows.slice(0, 100).map((row, rowIndex) => (
-                <motion.tr
-                  key={rowIndex}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.3, delay: rowIndex * 0.01 }}
-                  className={`${rowIndex % 2 === 0 ? "bg-white" : getAreaLightColor()} ${getAreaHoverColor()} transition-colors`}
-                >
-                  {row.map((cell, cellIndex) => (
-                    <td key={cellIndex} className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                      {cell?.toString() || ""}
-                    </td>
-                  ))}
-                </motion.tr>
-              ))}
+              <AnimatePresence>
+                {filteredData.rows.slice(0, 100).map((row, rowIndex) => (
+                  <motion.tr
+                    key={rowIndex}
+                    custom={rowIndex}
+                    variants={rowVariants}
+                    initial="hidden"
+                    animate="visible"
+                    className={`${rowIndex % 2 === 0 ? "bg-white" : getAreaLightColor()} ${getAreaHoverColor()} transition-colors`}
+                  >
+                    {row.map((cell, cellIndex) => (
+                      <td key={cellIndex} className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                        {cell?.toString() || ""}
+                      </td>
+                    ))}
+                  </motion.tr>
+                ))}
+              </AnimatePresence>
             </tbody>
           </table>
 
           {filteredData.rows.length > 100 && (
-            <div className="bg-gray-50 px-6 py-3 text-center text-sm text-gray-500 border-t border-gray-200">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 1 }}
+              className="bg-gray-50 px-6 py-3 text-center text-sm text-gray-500 border-t border-gray-200"
+            >
               Mostrando 100 de {filteredData.rows.length} filas
-            </div>
+            </motion.div>
           )}
         </div>
       </motion.div>
@@ -764,13 +855,26 @@ const DataTable: React.FC<DataTableProps> = ({ data, selectedArea, onBack }) => 
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 0.8, duration: 1 }}
-        className="text-center mt-10 text-green-700 font-medium"
+        className="text-center mt-10"
       >
-        <p>Sistema Alimentador Oriental 6</p>
+        <motion.p 
+          className={`font-medium bg-gradient-to-r ${getAreaGradient()} bg-clip-text text-transparent`}
+          whileHover={{ scale: 1.05 }}
+        >
+          Sistema Alimentador Oriental 6
+        </motion.p>
+        <motion.div 
+          className="flex items-center justify-center mt-2 text-xs text-gray-500"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 0.7 }}
+          transition={{ delay: 1.2 }}
+        >
+          <Shield size={12} className="mr-1" />
+          <span>Datos protegidos y seguros</span>
+        </motion.div>
       </motion.div>
     </motion.div>
   )
 }
 
 export default DataTable
-
