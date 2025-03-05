@@ -1,6 +1,10 @@
 export interface ExcelData {
   headers: string[];
   rows: any[][];
+  lunchSchedules?: {
+    time: string;
+    deduction: number;
+  }[];
 }
 
 export interface FileWithPreview extends File {
@@ -15,7 +19,7 @@ export interface AreaOption {
   icon: string;
   description: string;
   color: string;
-  password: string
+  password?: string;
 }
 
 export interface DatabaseRecord {

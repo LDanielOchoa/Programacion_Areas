@@ -1,6 +1,11 @@
 import * as XLSX from 'xlsx';
 import { ExcelData } from '../types';
 
+interface LunchSchedule {
+  time: string;
+  deduction: number;
+}
+
 export const parseExcelFile = async (file: File): Promise<ExcelData> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -9,33 +14,45 @@ export const parseExcelFile = async (file: File): Promise<ExcelData> => {
       try {
         const data = e.target?.result;
         
-        // Validate that the file is actually an Excel file
         try {
           const workbook = XLSX.read(data, { type: 'binary' });
           
-          // Check if workbook has sheets
           if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
             reject(new Error('El archivo Excel no contiene hojas de cálculo'));
             return;
           }
           
-          // Look for the specific sheet "Formato programación"
-          const sheetName = workbook.SheetNames.find(name => name.toLowerCase().includes('formato programación'));
+          const scheduleSheet = workbook.SheetNames.find(name => name.toLowerCase().includes('formato programación'));
+          const lunchSheet = workbook.SheetNames.find(name => name.toLowerCase() === 'almuerzo');
           
-          if (!sheetName) {
+          if (!scheduleSheet) {
             reject(new Error('No se encontró la hoja "Formato programación" en el archivo'));
             return;
           }
           
-          const worksheet = workbook.Sheets[sheetName];
+          let lunchSchedules: LunchSchedule[] = [];
+          if (lunchSheet) {
+            const lunchWorksheet = workbook.Sheets[lunchSheet];
+            const lunchData = XLSX.utils.sheet_to_json(lunchWorksheet, { header: 1, raw: false });
+            
+            for (let i = 12; i < lunchData.length; i++) {
+              const row = lunchData[i];
+              if (row && row[1] && row[2]) { 
+                lunchSchedules.push({
+                  time: row[1].toString(),
+                  deduction: parseFloat(row[2].toString()) || 0
+                });
+              }
+            }
+          }
           
-          // Check if worksheet has data
-          if (!worksheet || Object.keys(worksheet).length <= 2) { // Usually '!ref' and some other metadata
+          const worksheet = workbook.Sheets[scheduleSheet];
+          
+          if (!worksheet || Object.keys(worksheet).length <= 2) {
             reject(new Error('La hoja de cálculo está vacía'));
             return;
           }
           
-          // Convert to array of arrays
           const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: false });
           
           if (jsonData.length === 0) {
@@ -43,36 +60,30 @@ export const parseExcelFile = async (file: File): Promise<ExcelData> => {
             return;
           }
           
-          // Validate specific cells for the expected format
-          // Check for responsible name in C9
           const responsibleName = jsonData[8]?.[2];
           if (!responsibleName) {
             reject(new Error('No se encontró el nombre del responsable en la celda C9'));
             return;
           }
           
-          // Check for dates in C10
           const dateRange = jsonData[9]?.[2];
           if (!dateRange) {
             reject(new Error('No se encontró el rango de fechas en la celda C10'));
             return;
           }
           
-          // Check for headers in row 12 (A12-D12)
           const headers = jsonData[11]?.slice(0, 4);
           if (!headers || headers.length < 4 || headers.some(h => !h)) {
             reject(new Error('No se encontraron los encabezados correctos en las celdas A12-D12'));
             return;
           }
           
-          // Check for dates in row 12 (E12-K12)
           const dateHeaders = jsonData[11]?.slice(4, 11);
           if (!dateHeaders || dateHeaders.length < 1 || dateHeaders.some(h => !h)) {
             reject(new Error('No se encontraron las fechas en las celdas E12-K12'));
             return;
           }
           
-          // Validate IDs in column B (from B13 downwards)
           const ids = [];
           for (let i = 12; i < jsonData.length; i++) {
             if (jsonData[i]?.[1]) {
@@ -85,7 +96,6 @@ export const parseExcelFile = async (file: File): Promise<ExcelData> => {
             return;
           }
           
-          // Validate names in column C (from C13 downwards)
           const names = [];
           for (let i = 12; i < jsonData.length; i++) {
             if (jsonData[i]?.[2]) {
@@ -98,7 +108,6 @@ export const parseExcelFile = async (file: File): Promise<ExcelData> => {
             return;
           }
           
-          // Validate positions in column D (from D13 downwards)
           const positions = [];
           for (let i = 12; i < jsonData.length; i++) {
             if (jsonData[i]?.[3]) {
@@ -111,7 +120,6 @@ export const parseExcelFile = async (file: File): Promise<ExcelData> => {
             return;
           }
           
-          // Validate shifts in columns E-K (from row 13 downwards)
           let hasInvalidShift = false;
           let invalidShiftCell = '';
           
@@ -119,7 +127,6 @@ export const parseExcelFile = async (file: File): Promise<ExcelData> => {
             for (let j = 4; j < 11; j++) {
               const shift = jsonData[i]?.[j];
               if (shift) {
-                // Check if shift has a valid format (e.g., "12:45-20:45" or "DESCANSO")
                 const isValidFormat = 
                   typeof shift === 'string' && 
                   (shift.toUpperCase() === 'DESCANSO' || 
@@ -132,7 +139,6 @@ export const parseExcelFile = async (file: File): Promise<ExcelData> => {
                    shift.toUpperCase() === 'CALAMIDAD' ||
                    /^\d{1,2}:\d{2} - \d{1,2}:\d{2}$/.test(shift) ||
                    /^(?:\d{1,2}:\d{2} - \d{1,2}:\d{2})(?: \/ (?:\d{1,2}:\d{2} - \d{1,2}:\d{2}))?$/);
-                   
                 
                 if (!isValidFormat) {
                   hasInvalidShift = true;
@@ -150,18 +156,41 @@ export const parseExcelFile = async (file: File): Promise<ExcelData> => {
             return;
           }
           
-          // All validations passed, prepare the data
-          const allHeaders = [...headers, ...dateHeaders];
-          const rows = jsonData.slice(12).filter(row => row.length > 0);
+          const processedData = jsonData.map((row, rowIndex) => {
+            if (rowIndex < 12) return row; 
+            
+            return row.map((cell, colIndex) => {
+              if (colIndex < 4 || !cell) return cell; 
+              
+              const shift = cell.toString();
+              if (shift.toUpperCase() === 'DESCANSO' || 
+                  shift.toUpperCase() === 'VACACIONES' ||
+                  shift.toUpperCase() === 'SUSPENSION' ||
+                  shift.toUpperCase() === 'LIC REM' ||
+                  shift.toUpperCase() === 'LIC NO REM' ||
+                  shift.toUpperCase() === 'INC ENF' ||
+                  shift.toUpperCase() === 'INC ACC' ||
+                  shift.toUpperCase() === 'CALAMIDAD') {
+                return shift;
+              }
+              
+              const matchingSchedule = lunchSchedules.find(schedule => schedule.time === shift);
+              if (matchingSchedule) {
+                return `${shift} [${matchingSchedule.deduction}]`;
+              }
+              
+              return shift;
+            });
+          });
           
-          // Add metadata to the first row
           const metadataRow = [
             'Responsable:', responsibleName, 'Fechas:', dateRange, '', '', ''
           ];
           
           resolve({
-            headers: allHeaders,
-            rows: [metadataRow, ...rows]
+            headers: [...headers, ...dateHeaders],
+            rows: [metadataRow, ...processedData.slice(12)],
+            lunchSchedules 
           });
         } catch (parseError) {
           reject(new Error('El archivo no es un documento Excel válido o está dañado'));
@@ -176,11 +205,10 @@ export const parseExcelFile = async (file: File): Promise<ExcelData> => {
       reject(new Error('Error al leer el archivo'));
     };
     
-    // Set a timeout to handle very large files
     const timeout = setTimeout(() => {
       reader.abort();
       reject(new Error('El archivo es demasiado grande o complejo para procesarlo'));
-    }, 30000); // 30 seconds timeout
+    }, 30000);  
     
     reader.onloadend = () => {
       clearTimeout(timeout);

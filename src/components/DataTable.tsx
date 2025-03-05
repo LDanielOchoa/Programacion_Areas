@@ -4,19 +4,21 @@ import type React from "react"
 import { useState, useEffect, useRef } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import type { ExcelData, AreaType } from "../types"
-import { ArrowLeft, Check, AlertCircle, AlertTriangle, Calendar, Users, Clock, Loader2, Database, Shield } from 'lucide-react'
+import { ArrowLeft, Check, AlertCircle, AlertTriangle, Loader2, Database, Shield } from 'lucide-react'
 import { saveToDatabase, checkDatesExist } from "../utils/databaseService"
 import { validateEmployeesInSQLServer } from "../utils/sqlServerService"
 import SaveAnimation from "./SaveAnimation"
 import EmployeeValidationModal from "./EmployeeValidationModal"
 import DateExistModal from "./DateExistModal"
 import axios from "axios"
+import DateHolidays from "date-holidays";
 
 interface DataTableProps {
   data: ExcelData | null
   selectedArea: AreaType
   onBack: () => void
 }
+
 
 const DataTable: React.FC<DataTableProps> = ({ data, selectedArea, onBack }) => {
   const [isSaving, setIsSaving] = useState(false)
@@ -38,7 +40,23 @@ const DataTable: React.FC<DataTableProps> = ({ data, selectedArea, onBack }) => 
   const [scrollProgress, setScrollProgress] = useState(0)
   const tableContainerRef = useRef<HTMLDivElement>(null)
 
-  // Debug effect to log data changes
+  
+
+  const obtenerFechasFestivas = (year: number): string[] => {
+    const hd = new DateHolidays("CO"); // Configura para Colombia
+  
+    // Obtiene los festivos del año especificado
+    const holidays = hd.getHolidays(year);
+  
+    // Filtra solo las fechas en formato YYYY-MM-DD
+    const fechasFestivas = holidays.map((holiday: any) => holiday.date);
+    return fechasFestivas;
+  };
+  
+  // Uso en tu componente
+  const fechasFestivas = obtenerFechasFestivas(2023); // Obtiene festivos de 2023
+
+
   useEffect(() => {
     if (data) {
       console.log("[DEBUG] Excel Data Structure:", {
@@ -49,14 +67,12 @@ const DataTable: React.FC<DataTableProps> = ({ data, selectedArea, onBack }) => 
     }
   }, [data])
 
-  // Effect to scroll to status message when it changes
   useEffect(() => {
     if (saveStatus && tableRef.current) {
       tableRef.current.scrollIntoView({ behavior: "smooth", block: "start" })
     }
   }, [saveStatus])
 
-  // Handle scroll events for animation effects
   useEffect(() => {
     const handleScroll = () => {
       if (tableContainerRef.current) {
@@ -65,7 +81,6 @@ const DataTable: React.FC<DataTableProps> = ({ data, selectedArea, onBack }) => 
         setScrollProgress(progress || 0)
         setIsScrolling(true)
         
-        // Reset scrolling state after scrolling stops
         clearTimeout(window.scrollTimer)
         window.scrollTimer = setTimeout(() => {
           setIsScrolling(false)
@@ -203,53 +218,49 @@ const DataTable: React.FC<DataTableProps> = ({ data, selectedArea, onBack }) => 
     }
   }
 
-  // Extract metadata from the first row if it exists
   const hasMetadata = data.rows[0] && data.rows[0][0] === "Responsable:"
   const metadata = hasMetadata ? data.rows[0] : null
   const displayRows = hasMetadata ? data.rows.slice(1) : data.rows
 
-  // Extract date range from metadata
   const dateRange = metadata ? metadata[3] : ""
 
-  // Determine quincena based on date range
   const getQuincena = () => {
-    if (!dateRange) return ""
+    const today = new Date(); // Obtener la fecha actual
+    const day = today.getDate(); // Día del mes (1-31)
+    const month = today.getMonth(); // Mes (0-11, 0 = Enero)
+    const year = today.getFullYear(); // Año actual
+  
+    // Mapear números de mes a nombres en español
+    const meses = [
+      "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+      "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
+    ];
+  
+    // Determinar quincena basada en el día actual
+    const quincena = day <= 15 ? "Q1" : "Q2";
+    
+    return `${quincena}_${meses[month]}_${year}`;
+  };
 
-    // Assuming date range is in format "DD - DD" of the current month
-    const parts = dateRange.split("-").map((part) => part.trim())
-    if (parts.length !== 2) return ""
-
-    const startDay = Number.parseInt(parts[0])
-    return startDay <= 15 ? "Primera" : "Segunda"
-  }
-
-  // Filter out empty columns from the data
   const filterEmptyColumns = () => {
     if (!data || !data.headers.length) return { headers: [], rows: [] }
 
-    // Find columns that have data
     const nonEmptyColumnIndexes: number[] = []
 
-    // Check each column
     for (let colIndex = 0; colIndex < data.headers.length; colIndex++) {
-      // Check if header exists
       if (data.headers[colIndex]) {
-        // Check if any row has data in this column
         const hasData = displayRows.some((row) => {
           return row[colIndex] !== undefined && row[colIndex] !== null && row[colIndex] !== ""
         })
 
         if (hasData || colIndex < 4) {
-          // Always keep the first 4 columns (ID, CEDULA, NOMBRE, CARGO)
           nonEmptyColumnIndexes.push(colIndex)
         }
       }
     }
 
-    // Filter headers
     const filteredHeaders = nonEmptyColumnIndexes.map((index) => data.headers[index])
 
-    // Filter rows
     const filteredRows = displayRows.map((row) => {
       return nonEmptyColumnIndexes.map((index) => row[index])
     })
@@ -257,11 +268,9 @@ const DataTable: React.FC<DataTableProps> = ({ data, selectedArea, onBack }) => 
     return { headers: filteredHeaders, rows: filteredRows }
   }
 
-  // Get filtered data
   const filteredData = filterEmptyColumns()
 
   const continueWithSave = async () => {
-    // Verificar si hay registros válidos
     if (!preparedRecords || preparedRecords.length === 0) {
       console.error("[DEBUG] No hay registros para guardar:", preparedRecords)
       setDebugInfo("Error crítico: No hay datos válidos para guardar")
@@ -271,7 +280,6 @@ const DataTable: React.FC<DataTableProps> = ({ data, selectedArea, onBack }) => 
     }
 
     try {
-      // Resetear estados importantes
       setShowDateExistModal(false)
       setSaveStatus(null)
       setStatusMessage("")
@@ -281,13 +289,11 @@ const DataTable: React.FC<DataTableProps> = ({ data, selectedArea, onBack }) => 
       setAnimationStage("saving")
       setShowAnimation(true)
 
-      // Esperar para visualización de animación
-      await new Promise((resolve) => setTimeout(resolve, 1000)) // Reducido a 1 segundo
+      await new Promise((resolve) => setTimeout(resolve, 1000)) 
 
       console.log("[DEBUG] Enviando registros:", preparedRecords)
       setDebugInfo((prev) => `${prev}\nEnviando datos al servidor...`)
 
-      // Intentar guardar
       const startTime = Date.now()
       const result = await saveToDatabase(preparedRecords)
       const elapsedTime = ((Date.now() - startTime) / 1000).toFixed(2)
@@ -295,12 +301,10 @@ const DataTable: React.FC<DataTableProps> = ({ data, selectedArea, onBack }) => 
       console.log("[DEBUG] Respuesta del servidor:", result)
       setDebugInfo((prev) => `${prev}\nServidor respondió en ${elapsedTime}s: ${JSON.stringify(result, null, 2)}`)
 
-      // Validar respuesta del servidor
       if (!result?.success) {
         throw new Error(result?.error || "Respuesta inválida del servidor")
       }
 
-      // Actualizar UI
       setDebugInfo((prev) => `${prev}\nActualizando interfaz...`)
       await new Promise((resolve) => setTimeout(resolve, 500)) // Espera para animación
 
@@ -309,12 +313,10 @@ const DataTable: React.FC<DataTableProps> = ({ data, selectedArea, onBack }) => 
     } catch (error: any) {
       console.error("[DEBUG] Error completo:", error)
 
-      // Manejar errores específicos
       const errorMessage = error.response?.data?.error?.includes("duplicado")
         ? "Datos duplicados: Algunos registros ya existen"
         : error.message
 
-      // Actualizar estados de error
       setDebugInfo(
         (prev) =>
           `${prev || "Error durante el guardado"}\n` +
@@ -325,7 +327,6 @@ const DataTable: React.FC<DataTableProps> = ({ data, selectedArea, onBack }) => 
       setSaveStatus("error")
       setStatusMessage(errorMessage)
 
-      // Mostrar error en consola detallado
       if (error.response) {
         console.error("Error del servidor:", {
           status: error.response.status,
@@ -336,20 +337,19 @@ const DataTable: React.FC<DataTableProps> = ({ data, selectedArea, onBack }) => 
         console.error("No hubo respuesta del servidor:", error.request)
       }
     } finally {
-      // Limpiar estados independientemente del resultado
       setTimeout(() => {
         setShowAnimation(false)
         setAnimationStage("validating")
         setIsSaving(false)
         setDebugInfo(null)
-      }, 2000) // Limpiar después de 2 segundos
+      }, 2000) 
     }
   }
 
   const formatDateForDatabase = (dateHeader: any): string => {
     console.log("[DEBUG] Formatting date:", dateHeader)
 
-    const currentYear = new Date().getFullYear() // Año actual real
+    const currentYear = new Date().getFullYear() 
 
     if (typeof dateHeader === "string") {
       if (/^\d{1,2}-[A-Za-z]{3}$/i.test(dateHeader)) {
@@ -374,12 +374,11 @@ const DataTable: React.FC<DataTableProps> = ({ data, selectedArea, onBack }) => 
           }
 
           const monthNum = monthMap[month] || "01"
-          return `${currentYear}-${monthNum}-${day}` // Usar año actual
+          return `${currentYear}-${monthNum}-${day}` 
         }
       }
     }
 
-    // Intentar parsear como fecha
     const date = new Date(dateHeader)
     if (!isNaN(date.getTime())) {
       return date.toISOString().split("T")[0]
@@ -390,58 +389,84 @@ const DataTable: React.FC<DataTableProps> = ({ data, selectedArea, onBack }) => 
   }
 
   const handleSaveToDatabase = async () => {
-    if (!data || isSaving) return
-
-    // Resetear todos los estados relevantes
-    setIsSaving(true)
-    setSaveStatus(null)
-    setStatusMessage("")
-    setSqlServerError(null)
-    setMysqlError(null)
-    setDebugInfo("Iniciando proceso de guardado...")
-    setPreparedRecords([])
-
+    if (!data || isSaving) return;
+  
+    setIsSaving(true);
+    setSaveStatus(null);
+    setStatusMessage("");
+    setSqlServerError(null);
+    setMysqlError(null);
+    setDebugInfo("Iniciando proceso de guardado...");
+    setPreparedRecords([]);
+  
     try {
-      // 1. Preparar registros
-      const currentDate = new Date()
-      const quincena = getQuincena()
-      const dateHeaders = data.headers.slice(4)
-
-      // Crear copia local de los registros
-      const localRecords = []
-
-      // Procesamiento optimizado de filas
+      // Obtén las fechas festivas para el año actual
+      const year = new Date().getFullYear();
+      const fechasFestivas = await obtenerFechasFestivas(year); // Usa la API o librería
+  
+      const currentDate = new Date();
+      const quincena = getQuincena();
+      const dateHeaders = data.headers.slice(4);
+      const localRecords = [];
+  
       for (const row of displayRows) {
-        const cedula = row[1]
-        if (!cedula) continue
-
+        const cedula = row[1];
+        if (!cedula) continue;
+  
         for (let i = 0; i < dateHeaders.length; i++) {
-          const horario = row[i + 4]
-          if (!horario) continue
-
+          const horario = row[i + 4];
+          if (!horario) continue;
+  
+          let tiempoDescontar = 0;
+  
+          const horarioStr = horario.toString().toUpperCase();
+          if (
+            [
+              "DESCANSO",
+              "VACACIONES",
+              "SUSPENSION",
+              "LIC REM",
+              "LIC NO REM",
+              "INC ENF",
+              "INC ACC",
+              "CALAMIDAD",
+            ].includes(horarioStr)
+          ) {
+            tiempoDescontar = 0;
+          } else {
+            const matchingSchedule = data.lunchSchedules?.find(
+              (schedule) => schedule.time === horario.toString().trim()
+            );
+            if (matchingSchedule) {
+              tiempoDescontar = matchingSchedule.deduction;
+            }
+          }
+  
+          const fechaProgramacion = formatDateForDatabase(dateHeaders[i]);
+          const esFestivo = fechasFestivas.includes(fechaProgramacion); // Verifica si es festivo
+  
           const record = {
             CEDULA: cedula,
-            Fecha_programacion: formatDateForDatabase(dateHeaders[i]),
-            Horario_programacion: horario,
+            Fecha_programacion: fechaProgramacion,
+            Horario_programacion: horario.toString().trim(),
             Area: selectedArea,
-            Tiempo_a_descontar: ["DESCANSO", "VACACIONES", "SUSPENSION", "LIC REM", "LIC NO REM", "INC ENF", "INC ACC", "CALAMIDAD"].includes(horario.toString().toUpperCase()) ? 0 : 8,
+            Tiempo_a_descontar: tiempoDescontar,
             Quincena: quincena,
-            clasificacion: row[3] || "No especificado",
+            clasificacion: esFestivo ? row[3] || "Festivo" : null, // Solo si es festivo
             fecha_consulta: currentDate.toISOString(),
-          }
-
-          localRecords.push(record)
+          };
+  
+          localRecords.push(record);
         }
       }
-
+  
       if (localRecords.length === 0) {
-        throw new Error("No hay registros válidos para guardar")
+        throw new Error("No hay registros válidos para guardar");
       }
 
-      // 2. Validación de empleados
       setAnimationStage("validating")
       setShowAnimation(true)
-      await new Promise((resolve) => setTimeout(resolve, 1000)) // Animación
+      await new Promise((resolve) => setTimeout(resolve, 1000))
 
       const employees = Array.from(new Map(displayRows.map((row) => [row[1], row[2]]))).map(([cedula, nombre]) => ({
         cedula,
@@ -459,7 +484,6 @@ const DataTable: React.FC<DataTableProps> = ({ data, selectedArea, onBack }) => 
         return
       }
 
-      // 3. Verificación de fechas
       setAnimationStage("transferring")
       await new Promise((resolve) => setTimeout(resolve, 1000))
 
@@ -472,14 +496,13 @@ const DataTable: React.FC<DataTableProps> = ({ data, selectedArea, onBack }) => 
         return
       }
 
-      // 4. Guardado final
       setAnimationStage("saving")
-      setPreparedRecords(localRecords) // Usar la copia local actualizada
+      setPreparedRecords(localRecords) 
       setRecordCount(localRecords.length)
 
       try {
         const result = await axios.post(
-          "http://localhost:3001/api/save-schedule",
+          "https://programacion-areas-khbj.onrender.com/api/save-schedule",
           {
             records: localRecords,
             area: selectedArea,
@@ -491,63 +514,51 @@ const DataTable: React.FC<DataTableProps> = ({ data, selectedArea, onBack }) => 
           },
         )
 
-        // Manejo de respuesta - Verificar si hay mensaje o success
         if (result.data && (result.data.success || result.data.message)) {
           setSaveStatus("success")
           setStatusMessage(`${localRecords.length} registros guardados exitosamente`)
         } else {
-          // Si la respuesta no tiene success=true ni message pero tampoco lanzó error
           throw new Error("Respuesta del servidor sin confirmación de éxito")
         }
       } catch (axiosError: any) {
-        // Capturar específicamente errores de axios
         console.error("[AXIOS ERROR]", axiosError)
 
         if (axiosError.response) {
-          // El servidor respondió con un código de estado fuera del rango 2xx
           const serverMessage = axiosError.response.data?.error || "Error en la respuesta del servidor"
           throw new Error(serverMessage)
         } else if (axiosError.request) {
-          // La solicitud se hizo pero no se recibió respuesta
           throw new Error("No se recibió respuesta del servidor. Verifique la conexión.")
         } else {
-          // Error al configurar la solicitud
           throw axiosError
         }
       }
     } catch (error: any) {
-      console.error("[FINAL ERROR]", error)
-
-      // Manejo unificado de errores
-      let errorMessage = "Error desconocido al guardar"
-
-      // Intentar extraer un mensaje más específico
+      console.error("[FINAL ERROR]", error);
+      let errorMessage = "Error desconocido al guardar";
+  
       if (error.message) {
-        errorMessage = error.message
+        errorMessage = error.message;
       } else if (typeof error === "string") {
-        errorMessage = error
+        errorMessage = error;
       }
-
-      setSaveStatus("error")
-      setStatusMessage(errorMessage)
-
-      // Registro detallado para depuración
+  
+      setSaveStatus("error");
+      setStatusMessage(errorMessage);
+  
       setDebugInfo(`
         Error: ${errorMessage}
         Stack: ${error.stack || "No disponible"}
         ${error.response ? `Respuesta: ${JSON.stringify(error.response.data)}` : ""}
-      `)
+      `);
     } finally {
-      // Limpieza final
       setTimeout(() => {
-        setShowAnimation(false)
-        setIsSaving(false)
-        setAnimationStage("validating")
-      }, 2000)
+        setShowAnimation(false);
+        setIsSaving(false);
+        setAnimationStage("validating");
+      }, 2000);
     }
-  }
+  };
 
-  // Calculate summary statistics
   const calculateStats = () => {
     if (!filteredData.rows.length) return { employees: 0, dates: 0, shifts: 0 }
 
@@ -556,15 +567,13 @@ const DataTable: React.FC<DataTableProps> = ({ data, selectedArea, onBack }) => 
     let totalShifts = 0
 
     filteredData.rows.forEach((row) => {
-      if (row[1]) uniqueEmployees.add(row[1]) // CEDULA column
+      if (row[1]) uniqueEmployees.add(row[1]) 
 
-      // Count non-empty shifts
       for (let i = 4; i < row.length; i++) {
         if (row[i]) totalShifts++
       }
     })
 
-    // Count date headers
     const dateHeaders = filteredData.headers.slice(4)
     uniqueDates.add(...dateHeaders)
 
@@ -577,7 +586,6 @@ const DataTable: React.FC<DataTableProps> = ({ data, selectedArea, onBack }) => 
 
   const stats = calculateStats()
 
-  // Animation variants
   const containerVariants = {
     hidden: { opacity: 0 },
     visible: { 
@@ -791,7 +799,6 @@ const DataTable: React.FC<DataTableProps> = ({ data, selectedArea, onBack }) => 
             scrollbarColor: `var(--${selectedArea.toLowerCase()}-color) transparent`
           }}
         >
-          {/* Scroll indicator */}
           <motion.div 
             className={`absolute right-0 top-0 w-1 bg-gradient-to-b ${getAreaGradient()} opacity-70 z-20 rounded-r-md`}
             initial={{ height: "0%" }}
