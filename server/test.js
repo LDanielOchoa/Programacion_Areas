@@ -1,34 +1,24 @@
-import sql from 'mssql';
+import mysql from 'mysql2/promise';
 import dotenv from 'dotenv';
 
 dotenv.config();
 
-const sqlServerConfig = {
-  user: process.env.SQL_SERVER_USER || 'power-bi',
-  password: process.env.SQL_SERVER_PASSWORD || 'Z1x2c3v4*',
-  server: process.env.SQL_SERVER_HOST || '192.168.90.64',
-  database: process.env.SQL_SERVER_DB || 'UNOEE',
-  options: {
-    encrypt: false,
-    trustServerCertificate: true
-  }
+const mysqlConfig = {
+  host: process.env.DB_HOST || '190.90.160.5',
+  user: process.env.DB_USER || 'saocomct_camaras',
+  password: process.env.DB_PASSWORD || '1t&F)DQG6BLq',
+  database: process.env.DB_NAME || 'saocomct_camaras',
 };
 
-async function testSQLQuery() {
-    try {
-      let pool = await sql.connect(sqlServerConfig);
-      let result = await pool.request().query(`
-        SELECT TOP 10 * FROM BI_W0550
-      `);
-      console.log('Resultado de la consulta:', result.recordset);
-      await pool.close();
-    } catch (error) {
-      console.error('Error ejecutando consulta SQL:', error);
-    }
+async function testMySQLQuery() {
+  try {
+    const connection = await mysql.createConnection(mysqlConfig);
+    const [rows] = await connection.execute('SELECT * FROM programacion_empleados LIMIT 10');
+    console.log('Resultado de la consulta:', rows);
+    await connection.end();
+  } catch (error) {
+    console.error('Error ejecutando consulta SQL:', error);
   }
-  
-  testSQLQuery();
+}
 
-
-
-
+testMySQLQuery();

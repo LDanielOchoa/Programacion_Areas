@@ -9,40 +9,35 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// Middleware
 app.use(cors());
-app.use(express.json({ limit: '50mb' })); // Aumentar límite para peticiones grandes
+app.use(express.json({ limit: '50mb' })); 
 
-// Database connection configuration for MySQL
 const dbConfig = {
-  host: process.env.DB_HOST || 'localhost',
-  user: process.env.DB_USER || 'root',
-  password: process.env.DB_PASSWORD || '',
-  database: process.env.DB_NAME || 'sistema_alimentador',
+  host: process.env.DB_HOST || '190.90.160.5',
+  user: process.env.DB_USER || 'saocomct_camaras',
+  password: process.env.DB_PASSWORD || '1t&F)DQG6BLq',
+  database: process.env.DB_NAME || 'programacion_empleados',
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0,
-  connectTimeout: 15000, // 15 second timeout for connection attempts
-  timezone: '+00:00' // Usar UTC para evitar problemas con fechas
+  connectTimeout: 15000,
+  timezone: '+00:00' 
 };
 
-// Create MySQL connection pool
 const pool = mysql.createPool(dbConfig);
 
-// SQL Server configuration
 const sqlServerConfig = {
   user: process.env.SQL_SERVER_USER || 'power-bi',
   password: process.env.SQL_SERVER_PASSWORD || 'Z1x2c3v4*',
   server: process.env.SQL_SERVER_HOST || '192.168.90.64',
   database: process.env.SQL_SERVER_DB || 'UNOEE',
   options: {
-    encrypt: false, // for azure
-    trustServerCertificate: true, // change to true for local dev / self-signed certs
-    connectTimeout: 10000 // 10 second timeout for connection attempts
+    encrypt: false, 
+    trustServerCertificate: true, 
+    connectTimeout: 10000 
   }
 };
 
-// Test database connection
 app.get('/api/test-connection', async (req, res) => {
   try {
     console.log('[INFO] Testing MySQL connection...');
@@ -56,19 +51,31 @@ app.get('/api/test-connection', async (req, res) => {
   }
 });
 
-// Validate employees in SQL Server
 app.post('/api/validate-employees', async (req, res) => {
   const { employees } = req.body;
   console.log('[INFO] Petición recibida en /api/validate-employees');
 
-  // Validación mejorada de entrada
-  if (!Array.isArray(employees) || employees.length === 0 || employees.length > 1000) {
-      console.log('[ERROR] Lista de empleados inválida. Cantidad:', employees?.length || 0);
+  // Validación inicial de la lista de empleados
+  if (!Array.isArray(employees)) {
+      console.log('[ERROR] Formato de lista de empleados inválido');
       return res.status(400).json({ 
-          error: employees?.length > 1000 ? 
-              'Máximo 1000 empleados por solicitud' : 
-              'Lista de empleados vacía o formato inválido' 
+          error: 'Formato de lista de empleados inválido' 
       });
+  }
+
+  // Filtra empleados con cédulas válidas (no null ni undefined)
+  const validEmployees = employees.filter(emp => {
+      return emp.cedula !== null && emp.cedula !== undefined;
+  });
+
+  if (validEmployees.length === 0) {
+      console.log('[ERROR] No hay cédulas válidas para procesar');
+      return res.status(400).json({ error: 'No hay cédulas válidas para procesar' });
+  }
+
+  if (validEmployees.length > 1000) {
+      console.log('[ERROR] Demasiadas cédulas para procesar:', validEmployees.length);
+      return res.status(400).json({ error: 'Máximo 1000 empleados por solicitud' });
   }
 
   let sqlPool;
@@ -76,9 +83,9 @@ app.post('/api/validate-employees', async (req, res) => {
       console.log('[INFO] Conectando a SQL Server...');
       sqlPool = await sql.connect(sqlServerConfig);
       
-      // Limpieza y validación de cédulas
-      const cedulas = employees.map(emp => {
-          const original = emp.cedula?.toString() || '';
+      // Limpia y valida las cédulas
+      const cedulas = validEmployees.map(emp => {
+          const original = emp.cedula.toString(); // Ahora es seguro porque ya filtramos null/undefined
           const cleaned = original.replace(/[^\d]/g, '').trim();
           
           if (!cleaned) {
@@ -88,7 +95,7 @@ app.post('/api/validate-employees', async (req, res) => {
           
           console.log(`[DEBUG] Cédula original: ${original} -> Limpia: ${cleaned}`);
           return cleaned;
-      }).filter(Boolean);
+      }).filter(Boolean); // Filtra valores null o undefined
 
       if (cedulas.length === 0) {
           console.log('[ERROR] Todas las cédulas son inválidas');
@@ -97,14 +104,12 @@ app.post('/api/validate-employees', async (req, res) => {
 
       console.log('[INFO] Cédulas válidas procesadas:', cedulas);
 
-      // Optimización de parámetros
+      // Prepara los parámetros para la consulta SQL
       const parameters = cedulas.map((_, i) => `@ced${i}`).join(',');
       const request = sqlPool.request();
       
-      // Configuración de timeout
-      request.commandTimeout = 10000; // 10 segundos
+      request.commandTimeout = 10000;
 
-      // Asignación de parámetros con validación
       cedulas.forEach((cedula, i) => {
           if (cedula.length > 15) {
               console.warn(`[WARN] Cédula demasiado larga: ${cedula} (${cedula.length})`);
@@ -112,7 +117,7 @@ app.post('/api/validate-employees', async (req, res) => {
           request.input(`ced${i}`, sql.VarChar(15), cedula.padEnd(15, ' '));
       });
 
-      // Consulta optimizada
+      // Construye y ejecuta la consulta SQL
       const query = `
         SELECT 
             LTRIM(RTRIM(REPLACE(F200_ID, CHAR(160), ''))) AS F200_ID
@@ -125,34 +130,33 @@ app.post('/api/validate-employees', async (req, res) => {
       
       console.log('[INFO] Ejecutando consulta SQL:', query.replace(/\s+/g, ' '));
 
-      // Ejecución con manejo de timeout
       const result = await request.query(query);
       console.log(`[INFO] Registros encontrados: ${result.recordset.length}`);
       
-      // Normalización de resultados
+      // Procesa los resultados de la consulta
       const validCedulas = new Set(
           result.recordset.map(record => 
-              record.F200_ID.replace(/[^\d]/g, '').trim()
+              record.F200_ID?.replace(/[^\d]/g, '').trim() || '' // Usa optional chaining para evitar errores
           )
       );
 
-      // Validación cruzada
-      const invalidEmployees = employees.filter(emp => {
-          const cleaned = emp.cedula.toString().replace(/[^\d]/g, '').trim();
+      // Filtra los empleados inválidos
+      const invalidEmployees = validEmployees.filter(emp => {
+          const cleaned = emp.cedula.toString().replace(/[^\d]/g, '').trim(); // Ya filtramos null/undefined
           return !validCedulas.has(cleaned);
       });
 
       console.log(`[INFO] Validación completada. Válidos: ${validCedulas.size}, Inválidos: ${invalidEmployees.length}`);
 
-      // Respuesta estructurada
+      // Devuelve la respuesta
       res.status(200).json({
           isValid: invalidEmployees.length === 0,
           invalidEmployees: invalidEmployees.map(emp => ({
               cedula: emp.cedula,
-              nombre: emp.nombre || 'No disponible'
+              nombre: emp.nombre || 'No disponible'  // Maneja valores null o undefined en el nombre
           })),
           meta: {
-              totalChecked: employees.length,
+              totalChecked: validEmployees.length,
               validCount: validCedulas.size,
               invalidCount: invalidEmployees.length
           }
@@ -173,7 +177,6 @@ app.post('/api/validate-employees', async (req, res) => {
           } : null
       });
   } finally {
-      // Cierre seguro de conexión
       if (sqlPool) {
           try {
               await sqlPool.close();
@@ -185,7 +188,6 @@ app.post('/api/validate-employees', async (req, res) => {
   }
 });
 
-// Check if dates already exist in the database for a specific area
 app.post('/api/check-dates', async (req, res) => {
   const { dates, area } = req.body;
   console.log('[INFO] Petición recibida en /api/check-dates');
@@ -202,7 +204,6 @@ app.post('/api/check-dates', async (req, res) => {
   }
   
   try {
-    // Try to get a connection from the pool
     let connection;
     try {
       console.log('[INFO] Intentando conectar a MySQL...');
@@ -211,7 +212,6 @@ app.post('/api/check-dates', async (req, res) => {
     } catch (connError) {
       console.error('[ERROR] MySQL connection error:', connError);
       
-      // In development mode, we'll allow bypassing date check
       if (process.env.NODE_ENV === 'development' || !process.env.NODE_ENV) {
         console.log('[INFO] Running in development mode - bypassing date check');
         return res.status(200).json({
@@ -219,14 +219,12 @@ app.post('/api/check-dates', async (req, res) => {
           existingDates: []
         });
       } else {
-        throw connError; // Re-throw in production
+        throw connError; 
       }
     }
     
     try {
-      // Format dates for SQL query
       const formattedDates = dates.map(date => {
-        // Ensure date is in YYYY-MM-DD format
         let formattedDate = date;
         if (date instanceof Date) {
           formattedDate = date.toISOString().split('T')[0];
@@ -237,8 +235,6 @@ app.post('/api/check-dates', async (req, res) => {
       }).join(',');
       
       console.log('[DEBUG] Fechas formateadas:', formattedDates);
-      
-      // Check if the table exists first
       console.log('[INFO] Verificando si existe la tabla programacion_turnos...');
       const [tables] = await connection.execute(`
         SELECT TABLE_NAME 
@@ -249,7 +245,6 @@ app.post('/api/check-dates', async (req, res) => {
       
       console.log('[DEBUG] Resultado de verificación de tabla:', tables);
       
-      // If table doesn't exist yet, return no existing dates
       if (!tables || (tables).length === 0) {
         console.log('[INFO] La tabla programacion_turnos no existe, se creará al guardar');
         return res.status(200).json({
@@ -257,8 +252,6 @@ app.post('/api/check-dates', async (req, res) => {
           existingDates: []
         });
       }
-      
-      // Query to check which dates exist in the database for the specified area
       const query = `
         SELECT DISTINCT Fecha_programacion 
         FROM programacion_turnos 
@@ -272,9 +265,7 @@ app.post('/api/check-dates', async (req, res) => {
       const [rows] = await connection.execute(query, [area]);
       console.log('[DEBUG] Resultado de consulta:', rows);
       
-      // Extract existing dates
       const existingDates = rows.map((row) => {
-        // Handle different date formats
         if (row.Fecha_programacion instanceof Date) {
           return row.Fecha_programacion.toISOString().split('T')[0];
         } else if (typeof row.Fecha_programacion === 'string') {
@@ -292,7 +283,6 @@ app.post('/api/check-dates', async (req, res) => {
     } catch (error) {
       console.error('[ERROR] Error checking dates:', error);
       
-      // In development mode, we'll allow bypassing date check on query errors
       if (process.env.NODE_ENV === 'development' || !process.env.NODE_ENV) {
         console.log('[INFO] Error in date check query - bypassing in development mode');
         return res.status(200).json({
@@ -312,8 +302,10 @@ app.post('/api/check-dates', async (req, res) => {
   }
 });
 
-// En el endpoint /api/save-schedule
+
+
 app.post('/api/save-schedule', async (req, res) => {
+  const records = req.body.records; 
   const currentYear = new Date().getFullYear();
   
   const invalidYearRecords = req.body.records.filter(record => {
@@ -327,18 +319,13 @@ app.post('/api/save-schedule', async (req, res) => {
       invalidRecords: invalidYearRecords.map(r => r.Fecha_programacion)
     });
   }
-  
-  console.log(`[INFO] Recibidos ${records.length} registros para guardar`);
-  console.log('[DEBUG] Primer registro:', JSON.stringify(records[0]));
 
   let connection;
   try {
-    // Conexión a la base de datos
     console.log('[INFO] Intentando conectar a MySQL...');
     connection = await pool.getConnection();
     console.log('[INFO] Conexión a MySQL establecida');
 
-    // Verificar y crear tabla si no existe
     console.log('[INFO] Verificando estructura de la tabla...');
     const [tables] = await connection.execute(`
       SELECT TABLE_NAME 
@@ -367,20 +354,17 @@ app.post('/api/save-schedule', async (req, res) => {
       console.log('[INFO] Tabla creada exitosamente');
     }
 
-    // Validar y preparar datos
     console.log('[INFO] Validando registros...');
     const values = [];
     const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
     
     for (const [index, record] of records.entries()) {
       try {
-        // Validar CEDULA
         const cedula = Number(record.CEDULA);
         if (isNaN(cedula) || cedula.toString().length < 6) {
           throw new Error(`CEDULA inválida: ${record.CEDULA}`);
         }
 
-        // Validar y formatear fecha
         const fechaMatch = record.Fecha_programacion.match(/^(\d{4})-(\d{2})-(\d{2})/);
         if (!fechaMatch) {
           throw new Error(`Formato de fecha inválido: ${record.Fecha_programacion}`);
@@ -391,7 +375,6 @@ app.post('/api/save-schedule', async (req, res) => {
           throw new Error(`Fecha inválida: ${fecha}`);
         }
 
-        // Validar horario
         if (typeof record.Horario_programacion !== 'string' || record.Horario_programacion.trim().length === 0) {
           throw new Error(`Horario inválido: ${record.Horario_programacion}`);
         }
@@ -403,7 +386,7 @@ app.post('/api/save-schedule', async (req, res) => {
           record.Area,
           Number(record.Tiempo_a_descontar) || 0,
           record.Quincena,
-          record.clasificacion || 'No especificado',
+          record.clasificacion || null,
           now
         ]);
 
@@ -418,20 +401,17 @@ app.post('/api/save-schedule', async (req, res) => {
       }
     }
 
-    // Transacción de inserción
     console.log('[INFO] Iniciando transacción...');
     await connection.beginTransaction();
 
     try {
-      // Inserción masiva
       console.log('[INFO] Insertando registros...');
       const [result] = await connection.query(
         `INSERT INTO programacion_turnos 
-        (CEDULA, Fecha_programacion, Horario_programacion, Area, 
-         Tiempo_a_descontar, Quincena, clasificacion, fecha_consulta)
+        (CEDULA, Fecha_programacion, Horario_programacion, Area, \`Tiempo a descontar [h]\`, Quincena, clasificacion, fecha_consulta)
         VALUES ?`,
         [values]
-      );
+      );      
 
       console.log('[INFO] Confirmando transacción...');
       await connection.commit();
@@ -450,7 +430,6 @@ app.post('/api/save-schedule', async (req, res) => {
       console.error('[ERROR] Error en inserción:', insertError);
       await connection.rollback();
       
-      // Manejo detallado de errores de MySQL
       if (insertError.code === 'ER_DUP_ENTRY') {
         const match = insertError.message.match(/Duplicate entry '(.+)' for key/);
         return res.status(409).json({
@@ -469,7 +448,6 @@ app.post('/api/save-schedule', async (req, res) => {
   } catch (connectionError) {
     console.error('[ERROR] Error de conexión:', connectionError);
     
-    // Modo desarrollo: Proveer detalles del error
     const errorResponse = {
       error: 'Error de conexión a la base de datos',
       details: connectionError.message,
@@ -495,7 +473,6 @@ app.post('/api/save-schedule', async (req, res) => {
   }
 });
 
-// Start server
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
