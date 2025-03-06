@@ -51,7 +51,7 @@ export const validateEmployeesInMySQL = async (
     logDebug(`Muestra de empleados a validar:`, employeesToValidate.slice(0, 3));
 
     // URL directa al API
-    const API_URL = 'http://localhost:3307/api';
+    const API_URL = 'https://programacion-areas-khbj.onrender.com/api';
     
     // Agregar timestamp para evitar problemas de caché
     const timestamp = new Date().getTime();

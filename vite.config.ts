@@ -10,7 +10,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'http://localhost:3307/',
+        target: 'https://programacion-areas-khbj.onrender.com/',
         changeOrigin: true,
         secure: false
       }
