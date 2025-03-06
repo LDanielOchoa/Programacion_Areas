@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from "framer-motion"
 import type { ExcelData, AreaType } from "../types"
 import { ArrowLeft, Check, AlertCircle, AlertTriangle, Loader2, Database, Shield } from 'lucide-react'
 import { saveToDatabase, checkDatesExist } from "../utils/databaseService"
-import { validateEmployeesInSQLServer } from "../utils/sqlServerService"
+import { validateEmployeesInMySQL } from "../utils/sqlServerService"
 import SaveAnimation from "./SaveAnimation"
 import EmployeeValidationModal from "./EmployeeValidationModal"
 import DateExistModal from "./DateExistModal"
@@ -473,7 +473,7 @@ const DataTable: React.FC<DataTableProps> = ({ data, selectedArea, onBack }) => 
         nombre,
       }))
 
-      const validationResult = await validateEmployeesInSQLServer(
+      const validationResult = await validateEmployeesInMySQL(
         employees.map((e) => e.cedula),
         employees.map((e) => e.nombre),
       )
@@ -502,7 +502,7 @@ const DataTable: React.FC<DataTableProps> = ({ data, selectedArea, onBack }) => 
 
       try {
         const result = await axios.post(
-          "https://programacion-areas-khbj.onrender.com/api/save-schedule",
+          "http://localhost:3307/api/save-schedule",
           {
             records: localRecords,
             area: selectedArea,

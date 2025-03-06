@@ -7,36 +7,37 @@ import sql from 'mssql';
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 3307;
 
 app.use(cors());
 app.use(express.json({ limit: '50mb' })); 
 
 const dbConfig = {
-  host: process.env.DB_HOST || '190.90.160.5',
-  user: process.env.DB_USER || 'saocomct_camaras',
-  password: process.env.DB_PASSWORD || '1t&F)DQG6BLq',
-  database: process.env.DB_NAME || 'programacion_empleados',
+  host: process.env.DB_HOST || '192.168.90.32',
+  user: process.env.DB_USER || 'desarrollo',
+  password: process.env.DB_PASSWORD || 'test_24*',
+  database: process.env.DB_NAME || 'bdsaocomco_operaciones',
+  port: 3306, // Agregar puerto explícito
   waitForConnections: true,
   connectionLimit: 10,
-  queueLimit: 0,
-  connectTimeout: 15000,
-  timezone: '+00:00' 
+  connectTimeout: 30000 // Aumentar tiempo de conexión
 };
 
 const pool = mysql.createPool(dbConfig);
 
-const sqlServerConfig = {
-  user: process.env.SQL_SERVER_USER || 'power-bi',
-  password: process.env.SQL_SERVER_PASSWORD || 'Z1x2c3v4*',
-  server: process.env.SQL_SERVER_HOST || '192.168.90.64',
-  database: process.env.SQL_SERVER_DB || 'UNOEE',
-  options: {
-    encrypt: false, 
-    trustServerCertificate: true, 
-    connectTimeout: 10000 
-  }
+const secondaryDbConfig = {
+  host: process.env.SQL_DB_HOST || '192.168.90.32', // Cambiar server -> host
+  user: process.env.SQL_DB_USER || 'desarrollo',
+  password: process.env.SQL_DB_PASSWORD || 'test_24*',
+  database: process.env.SQL_DB_NAME || 'bdsaocomco_operaciones',
+  port: 3306, // Puerto explícito para MySQL
+  waitForConnections: true,
+  connectionLimit: 10,
+  connectTimeout: 30000 // Aumentar tiempo de espera
 };
+
+const secondaryPool = mysql.createPool(secondaryDbConfig);
+
 
 app.get('/api/test-connection', async (req, res) => {
   try {
@@ -52,141 +53,89 @@ app.get('/api/test-connection', async (req, res) => {
 });
 
 app.post('/api/validate-employees', async (req, res) => {
+    // Para diagnóstico rápido, agrega esto al inicio:
+  console.log('Configuración BD principal:', dbConfig);
+  console.log('Configuración BD secundaria:', secondaryDbConfig);
   const { employees } = req.body;
   console.log('[INFO] Petición recibida en /api/validate-employees');
 
-  // Validación inicial de la lista de empleados
   if (!Array.isArray(employees)) {
-      console.log('[ERROR] Formato de lista de empleados inválido');
-      return res.status(400).json({ 
-          error: 'Formato de lista de empleados inválido' 
-      });
+    return res.status(400).json({ error: 'Formato de lista de empleados inválido' });
   }
 
-  // Filtra empleados con cédulas válidas (no null ni undefined)
-  const validEmployees = employees.filter(emp => {
-      return emp.cedula !== null && emp.cedula !== undefined;
-  });
+  const validEmployees = employees.filter(emp => emp.cedula !== null && emp.cedula !== undefined);
 
   if (validEmployees.length === 0) {
-      console.log('[ERROR] No hay cédulas válidas para procesar');
-      return res.status(400).json({ error: 'No hay cédulas válidas para procesar' });
+    return res.status(400).json({ error: 'No hay cédulas válidas para procesar' });
   }
 
   if (validEmployees.length > 1000) {
-      console.log('[ERROR] Demasiadas cédulas para procesar:', validEmployees.length);
-      return res.status(400).json({ error: 'Máximo 1000 empleados por solicitud' });
+    return res.status(400).json({ error: 'Máximo 1000 empleados por solicitud' });
   }
 
-  let sqlPool;
   try {
-      console.log('[INFO] Conectando a SQL Server...');
-      sqlPool = await sql.connect(sqlServerConfig);
-      
-      // Limpia y valida las cédulas
-      const cedulas = validEmployees.map(emp => {
-          const original = emp.cedula.toString(); // Ahora es seguro porque ya filtramos null/undefined
-          const cleaned = original.replace(/[^\d]/g, '').trim();
-          
-          if (!cleaned) {
-              console.warn(`[WARN] Cédula inválida en entrada: ${original}`);
-              return null;
-          }
-          
-          console.log(`[DEBUG] Cédula original: ${original} -> Limpia: ${cleaned}`);
-          return cleaned;
-      }).filter(Boolean); // Filtra valores null o undefined
+    console.log('[INFO] Conectando a MySQL secundario...');
+    const connection = await secondaryPool.getConnection();
 
-      if (cedulas.length === 0) {
-          console.log('[ERROR] Todas las cédulas son inválidas');
-          return res.status(400).json({ error: 'Ninguna cédula válida encontrada' });
+    const cedulas = validEmployees
+      .map(emp => {
+        const cleaned = emp.cedula.toString().replace(/[^\d]/g, '').trim();
+        return cleaned || null;
+      })
+      .filter(Boolean);
+
+    if (cedulas.length === 0) {
+      return res.status(400).json({ error: 'Ninguna cédula válida encontrada' });
+    }
+
+    // Crear placeholders para la consulta MySQL
+    const placeholders = cedulas.map(() => '?').join(',');
+    // Consulta SQL CORREGIDA
+    const query = `
+      SELECT 
+        TRIM(REPLACE(F200_NIT, CHAR(160), ' ')) AS F200_ID
+      FROM personas_validas
+      WHERE TRIM(REPLACE(F200_NIT, CHAR(160), ' ')) IN (${placeholders})
+    `;
+
+    console.log('[INFO] Ejecutando consulta MySQL:', query);
+    const [rows] = await connection.execute(query, cedulas);
+    connection.release();
+
+    const validCedulas = new Set(
+      rows.map(record => 
+        record.F200_ID?.replace(/[^\d]/g, '').trim() || ''
+      )
+    );
+
+    const invalidEmployees = validEmployees.filter(emp => {
+      const cleaned = emp.cedula.toString().replace(/[^\d]/g, '').trim();
+      return !validCedulas.has(cleaned);
+    });
+
+    res.status(200).json({
+      isValid: invalidEmployees.length === 0,
+      invalidEmployees: invalidEmployees.map(emp => ({
+        cedula: emp.cedula,
+        nombre: emp.nombre || 'No disponible'
+      })),
+      meta: {
+        totalChecked: validEmployees.length,
+        validCount: validCedulas.size,
+        invalidCount: invalidEmployees.length
       }
-
-      console.log('[INFO] Cédulas válidas procesadas:', cedulas);
-
-      // Prepara los parámetros para la consulta SQL
-      const parameters = cedulas.map((_, i) => `@ced${i}`).join(',');
-      const request = sqlPool.request();
-      
-      request.commandTimeout = 10000;
-
-      cedulas.forEach((cedula, i) => {
-          if (cedula.length > 15) {
-              console.warn(`[WARN] Cédula demasiado larga: ${cedula} (${cedula.length})`);
-          }
-          request.input(`ced${i}`, sql.VarChar(15), cedula.padEnd(15, ' '));
-      });
-
-      // Construye y ejecuta la consulta SQL
-      const query = `
-        SELECT 
-            LTRIM(RTRIM(REPLACE(F200_ID, CHAR(160), ''))) AS F200_ID
-        FROM BI_W0550
-        WHERE C0550_ID_CIA = '4'
-            AND T19_C0006_DESCRIPCION = 'Activo'
-            AND LTRIM(RTRIM(REPLACE(F200_ID, CHAR(160), ''))) IN (${parameters})
-        OPTION (MAXDOP 1, RECOMPILE)
-      `;
-      
-      console.log('[INFO] Ejecutando consulta SQL:', query.replace(/\s+/g, ' '));
-
-      const result = await request.query(query);
-      console.log(`[INFO] Registros encontrados: ${result.recordset.length}`);
-      
-      // Procesa los resultados de la consulta
-      const validCedulas = new Set(
-          result.recordset.map(record => 
-              record.F200_ID?.replace(/[^\d]/g, '').trim() || '' // Usa optional chaining para evitar errores
-          )
-      );
-
-      // Filtra los empleados inválidos
-      const invalidEmployees = validEmployees.filter(emp => {
-          const cleaned = emp.cedula.toString().replace(/[^\d]/g, '').trim(); // Ya filtramos null/undefined
-          return !validCedulas.has(cleaned);
-      });
-
-      console.log(`[INFO] Validación completada. Válidos: ${validCedulas.size}, Inválidos: ${invalidEmployees.length}`);
-
-      // Devuelve la respuesta
-      res.status(200).json({
-          isValid: invalidEmployees.length === 0,
-          invalidEmployees: invalidEmployees.map(emp => ({
-              cedula: emp.cedula,
-              nombre: emp.nombre || 'No disponible'  // Maneja valores null o undefined en el nombre
-          })),
-          meta: {
-              totalChecked: validEmployees.length,
-              validCount: validCedulas.size,
-              invalidCount: invalidEmployees.length
-          }
-      });
+    });
 
   } catch (error) {
-      console.error('[ERROR] Error en validación:', {
-          message: error.message,
-          code: error.code,
-          stack: error.stack
-      });
-      
-      res.status(500).json({
-          error: 'Error en validación',
-          details: process.env.NODE_ENV === 'development' ? {
-              message: error.message,
-              code: error.code
-          } : null
-      });
-  } finally {
-      if (sqlPool) {
-          try {
-              await sqlPool.close();
-              console.log('[INFO] Conexión a SQL Server cerrada');
-          } catch (closeError) {
-              console.error('[ERROR] Error cerrando conexión:', closeError.message);
-          }
-      }
+    console.error('[ERROR] Error en validación:', error);
+    res.status(500).json({
+      error: 'Error en validación',
+      details: process.env.NODE_ENV === 'development' ? error.message : null
+    });
   }
 });
+
+
 
 app.post('/api/check-dates', async (req, res) => {
   const { dates, area } = req.body;
@@ -408,7 +357,7 @@ app.post('/api/save-schedule', async (req, res) => {
       console.log('[INFO] Insertando registros...');
       const [result] = await connection.query(
         `INSERT INTO programacion_turnos 
-        (CEDULA, Fecha_programacion, Horario_programacion, Area, \`Tiempo a descontar [h]\`, Quincena, clasificacion, fecha_consulta)
+        (CEDULA, Fecha_programacion, Horario_programacion, Area, Tiempo_a_descontar, Quincena, clasificacion, fecha_consulta)
         VALUES ?`,
         [values]
       );      

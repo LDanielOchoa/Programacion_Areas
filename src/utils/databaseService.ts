@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { DatabaseRecord } from '../types';
 
-const API_URL = 'https://programacion-areas-khbj.onrender.com/api';
+const API_URL = 'http://localhost:3307/api';
 
 const logDebug = (message: string, data?: any) => {
   const timestamp = new Date().toISOString();

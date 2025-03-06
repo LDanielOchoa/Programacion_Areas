@@ -11,18 +11,18 @@ interface EmployeeValidationResult {
 // Función para imprimir logs detallados
 const logDebug = (message: string, data?: any) => {
   const timestamp = new Date().toISOString();
-  console.log(`[${timestamp}] [SQL_SERVER] ${message}`);
+  console.log(`[${timestamp}] [MYSQL_VALIDATION] ${message}`);
   if (data) {
     console.log('Datos:', data);
   }
 };
 
 /**
- * Valida si las cédulas de los empleados existen en la base de datos SQL Server
+ * Valida si las cédulas de los empleados existen en la base de datos MySQL
  * @param cedulas Array de cédulas a validar
  * @param nombres Array de nombres correspondientes a las cédulas
  */
-export const validateEmployeesInSQLServer = async (
+export const validateEmployeesInMySQL = async (
   cedulas: (string | number)[],
   nombres: string[]
 ): Promise<EmployeeValidationResult> => {
@@ -51,7 +51,7 @@ export const validateEmployeesInSQLServer = async (
     logDebug(`Muestra de empleados a validar:`, employeesToValidate.slice(0, 3));
 
     // URL directa al API
-    const API_URL = 'https://programacion-areas-khbj.onrender.com/api';
+    const API_URL = 'http://localhost:3307/api';
     
     // Agregar timestamp para evitar problemas de caché
     const timestamp = new Date().getTime();
@@ -65,34 +65,33 @@ export const validateEmployeesInSQLServer = async (
         'Content-Type': 'application/json',
         'Cache-Control': 'no-cache'
       },
-      timeout: 15000 // 15 segundos de timeout
+      timeout: 30000 // 15 segundos de timeout
     });
 
     logDebug(`Respuesta de validación de empleados:`, response.data);
     return response.data;
   } catch (error: any) {
-    logDebug(`Error en validateEmployeesInSQLServer: ${error.message}`);
+    logDebug(`Error en validateEmployeesInMySQL: ${error.message}`);
     
-    // Check if it's a connection error
+    // Manejar errores de conexión
     if (error.response?.data?.details?.includes('Failed to connect')) {
-      logDebug('SQL Server connection failed - bypassing validation in development mode');
+      logDebug('MySQL connection failed - bypassing validation in development mode');
       
-      // In development mode, we'll bypass the validation
-      // This allows testing without a working SQL Server connection
+      // Modo desarrollo: omitir validación
       return {
         isValid: true,
         invalidEmployees: []
       };
     }
     
-    // Mejorar el mensaje de error
+    // Mejorar el manejo de errores
     if (error.response) {
       logDebug(`Error de respuesta: ${error.response.status}`, error.response.data);
     } else if (error.request) {
       logDebug('No se recibió respuesta del servidor al validar empleados');
     }
     
-    // For other errors, return a default response to prevent the application from crashing
+    // Respuesta segura para prevenir caídas de la aplicación
     return {
       isValid: true,
       invalidEmployees: []
