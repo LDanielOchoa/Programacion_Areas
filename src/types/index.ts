@@ -11,7 +11,7 @@ export interface FileWithPreview extends File {
   preview?: string;
 }
 
-export type AreaType = 'Operaciones' | 'Lavado' | 'Mantenimiento' | 'Remanofactura' | 'ServiciosGenerales' | 'Vigilantes';
+export type AreaType = 'Operaciones' | 'Lavado' | 'Mantenimiento' | 'Remanofactura' | 'ServiciosGenerales' | 'Vigilantes'| string;
 
 export interface AreaOption {
   id: AreaType;

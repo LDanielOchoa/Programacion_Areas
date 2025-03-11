@@ -16,6 +16,8 @@ import {
   Table,
   ChevronRight,
   Sparkles,
+  Info,
+  XCircle,
 } from "lucide-react"
 import type { FileWithPreview, AreaType } from "../types"
 
@@ -25,17 +27,47 @@ interface FileUploaderProps {
   onBack: () => void
 }
 
+interface ErrorDetails {
+  title: string
+  message: string
+  type: "format" | "size" | "general"
+  suggestion: string
+  technicalDetails?: string
+}
+
+interface NotificationProps {
+  type: "success" | "error"
+  message: string
+}
+
+const Notification: React.FC<NotificationProps> = ({ type, message }) => (
+  <motion.div
+    initial={{ opacity: 0, y: 50 }}
+    animate={{ opacity: 1, y: 0 }}
+    exit={{ opacity: 0, y: -50 }}
+    className={`fixed bottom-4 right-4 p-4 rounded-lg shadow-lg ${
+      type === "success" ? "bg-green-500" : "bg-red-500"
+    } text-white`}
+  >
+    <div className="flex items-center">
+      {type === "success" ? <CheckCircle2 className="mr-2" /> : <AlertCircle className="mr-2" />}
+      <span>{message}</span>
+    </div>
+  </motion.div>
+)
+
 const FileUploader: React.FC<FileUploaderProps> = ({ onFileUpload, selectedArea, onBack }) => {
   const [file, setFile] = useState<FileWithPreview | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [errorType, setErrorType] = useState<"format" | "size" | "general" | null>(null)
+  const [error, setError] = useState<ErrorDetails | null>(null)
+  const [showErrorModal, setShowErrorModal] = useState(false)
   const [uploadSuccess, setUploadSuccess] = useState(false)
+  const [isProcessing, setIsProcessing] = useState(false)
+  const [notification, setNotification] = useState<NotificationProps | null>(null)
   const [windowSize, setWindowSize] = useState({
     width: typeof window !== "undefined" ? window.innerWidth : 1200,
     height: typeof window !== "undefined" ? window.innerHeight : 800,
   })
 
-  // Update window size for responsive design
   useEffect(() => {
     const handleResize = () => {
       setWindowSize({
@@ -48,43 +80,47 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileUpload, selectedArea,
     return () => window.removeEventListener("resize", handleResize)
   }, [])
 
+  const showNotification = (type: "success" | "error", message: string) => {
+    setNotification({ type, message })
+    setTimeout(() => setNotification(null), 3000)
+  }
+
   const onDrop = useCallback(
     (acceptedFiles: File[], fileRejections: any[]) => {
       setError(null)
-      setErrorType(null)
+      setShowErrorModal(false)
       setUploadSuccess(false)
 
-      // Handle rejected files first
       if (fileRejections.length > 0) {
         const rejection = fileRejections[0]
+        let errorDetails: ErrorDetails = {
+          title: "Error al cargar el archivo",
+          message: "Error al cargar el archivo. Inténtalo de nuevo.",
+          type: "general",
+          suggestion: "Si el problema persiste, contacta al soporte técnico",
+        }
 
-        // Check if it's a file type error
         if (rejection.errors.some((e: any) => e.code === "file-invalid-type")) {
           const fileType = rejection.file.name.split(".").pop()?.toLowerCase()
-
-          if (fileType === "jpg" || fileType === "jpeg" || fileType === "png" || fileType === "gif") {
-            setError("Has subido una imagen. Por favor, sube un archivo Excel (.xlsx o .xls)")
-            setErrorType("format")
-          } else if (fileType === "pdf") {
-            setError("Has subido un PDF. Por favor, sube un archivo Excel (.xlsx o .xls)")
-            setErrorType("format")
-          } else if (fileType === "doc" || fileType === "docx") {
-            setError("Has subido un documento Word. Por favor, sube un archivo Excel (.xlsx o .xls)")
-            setErrorType("format")
-          } else if (fileType === "txt" || fileType === "csv") {
-            setError(`Has subido un archivo ${fileType.toUpperCase()}. Por favor, sube un archivo Excel (.xlsx o .xls)`)
-            setErrorType("format")
-          } else {
-            setError("Formato de archivo no válido. Por favor, sube un archivo Excel (.xlsx o .xls)")
-            setErrorType("format")
+          errorDetails = {
+            title: "Formato de archivo incorrecto",
+            message: `Has subido un archivo ${fileType}. Por favor, sube un archivo Excel (.xlsx o .xls)`,
+            type: "format",
+            suggestion: 'Recuerda que solo se aceptan archivos Excel con la hoja "Formato programación"',
+            technicalDetails: `Tipo detectado: ${fileType}, Tamaño: ${(rejection.file.size / 1024).toFixed(2)} KB`,
           }
         } else if (rejection.errors.some((e: any) => e.code === "file-too-large")) {
-          setError("El archivo es demasiado grande. El tamaño máximo es 10MB.")
-          setErrorType("size")
-        } else {
-          setError("Error al cargar el archivo. Inténtalo de nuevo.")
-          setErrorType("general")
+          errorDetails = {
+            title: "Archivo demasiado grande",
+            message: "El archivo es demasiado grande. El tamaño máximo es 10MB.",
+            type: "size",
+            suggestion: "Intenta comprimir el archivo o dividirlo en partes más pequeñas",
+            technicalDetails: `Tamaño: ${(rejection.file.size / (1024 * 1024)).toFixed(2)} MB, Máximo permitido: 10MB`,
+          }
         }
+
+        setError(errorDetails)
+        setShowErrorModal(true)
         return
       }
 
@@ -94,17 +130,31 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileUpload, selectedArea,
 
       const selectedFile = acceptedFiles[0]
 
-      // Additional validation for Excel files
       if (!selectedFile.name.match(/\.(xlsx|xls)$/i)) {
-        setError("Por favor, sube un archivo de Excel válido (.xlsx o .xls)")
-        setErrorType("format")
+        const errorDetails: ErrorDetails = {
+          title: "Formato de archivo incorrecto",
+          message: "Por favor, sube un archivo de Excel válido (.xlsx o .xls)",
+          type: "format",
+          suggestion: 'Recuerda que solo se aceptan archivos Excel con la hoja "Formato programación"',
+          technicalDetails: `Tipo detectado: ${selectedFile.name.split(".").pop()}, Tamaño: ${(
+            selectedFile.size / 1024
+          ).toFixed(2)} KB`,
+        }
+        setError(errorDetails)
+        setShowErrorModal(true)
         return
       }
 
-      // Check file size (max 10MB)
       if (selectedFile.size > 10 * 1024 * 1024) {
-        setError("El archivo es demasiado grande. El tamaño máximo es 10MB.")
-        setErrorType("size")
+        const errorDetails: ErrorDetails = {
+          title: "Archivo demasiado grande",
+          message: "El archivo es demasiado grande. El tamaño máximo es 10MB.",
+          type: "size",
+          suggestion: "Intenta comprimir el archivo o dividirlo en partes más pequeñas",
+          technicalDetails: `Tamaño: ${(selectedFile.size / (1024 * 1024)).toFixed(2)} MB, Máximo permitido: 10MB`,
+        }
+        setError(errorDetails)
+        setShowErrorModal(true)
         return
       }
 
@@ -114,8 +164,8 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileUpload, selectedArea,
 
       setFile(fileWithPreview)
       setUploadSuccess(true)
+      showNotification("success", "Archivo cargado correctamente")
 
-      // Small delay to show success animation before processing
       setTimeout(() => {
         onFileUpload(selectedFile)
       }, 800)
@@ -129,8 +179,20 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileUpload, selectedArea,
     }
     setFile(null)
     setError(null)
-    setErrorType(null)
+    setShowErrorModal(false)
     setUploadSuccess(false)
+  }
+
+  const processFile = () => {
+    if (!file) return
+
+    setIsProcessing(true)
+
+    setTimeout(() => {
+      onFileUpload(file)
+      setIsProcessing(false)
+      showNotification("success", "Archivo procesado correctamente")
+    }, 1500)
   }
 
   const { getRootProps, getInputProps, isDragActive, isDragReject, open } = useDropzone({
@@ -142,7 +204,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileUpload, selectedArea,
     maxFiles: 1,
     maxSize: 10 * 1024 * 1024, // 10MB
     multiple: false,
-    noClick: file !== null, // Disable click when file is already uploaded
+    noClick: file !== null,
   })
 
   const getAreaColor = () => {
@@ -190,7 +252,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileUpload, selectedArea,
   }
 
   const getErrorIcon = () => {
-    switch (errorType) {
+    switch (error?.type) {
       case "format":
         return <FileImage size={24} className="text-red-500 mr-3 flex-shrink-0" />
       case "size":
@@ -247,6 +309,32 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileUpload, selectedArea,
         type: "spring",
         stiffness: 200,
         damping: 20,
+      },
+    },
+  }
+
+  const modalVariants = {
+    hidden: {
+      opacity: 0,
+      scale: 0.8,
+      y: 20,
+    },
+    visible: {
+      opacity: 1,
+      scale: 1,
+      y: 0,
+      transition: {
+        type: "spring",
+        stiffness: 400,
+        damping: 25,
+      },
+    },
+    exit: {
+      opacity: 0,
+      scale: 0.8,
+      y: -20,
+      transition: {
+        duration: 0.2,
       },
     },
   }
@@ -535,16 +623,34 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileUpload, selectedArea,
                   initial="idle"
                   whileHover="hover"
                   whileTap="tap"
-                  onClick={() => onFileUpload(file)}
-                  className={`px-5 py-2 ${getAreaButtonBg()} text-white rounded-lg shadow-md transition-all flex items-center gap-2`}
+                  onClick={processFile}
+                  disabled={isProcessing}
+                  className={`px-5 py-2 ${getAreaButtonBg()} text-white rounded-lg shadow-md transition-all flex items-center gap-2 ${
+                    isProcessing ? "opacity-80" : ""
+                  }`}
                 >
-                  <span>Procesar archivo</span>
-                  <motion.div
-                    animate={{ x: [0, 5, 0] }}
-                    transition={{ duration: 1.5, repeat: Number.POSITIVE_INFINITY, repeatDelay: 0.5 }}
-                  >
-                    <ChevronRight size={16} />
-                  </motion.div>
+                  {isProcessing ? (
+                    <>
+                      <motion.div
+                        animate={{ rotate: 360 }}
+                        transition={{ duration: 1, repeat: Number.POSITIVE_INFINITY, ease: "linear" }}
+                        className="mr-2"
+                      >
+                        <Sparkles size={16} />
+                      </motion.div>
+                      <span>Procesando...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>Procesar archivo</span>
+                      <motion.div
+                        animate={{ x: [0, 5, 0] }}
+                        transition={{ duration: 1.5, repeat: Number.POSITIVE_INFINITY, repeatDelay: 0.5 }}
+                      >
+                        <ChevronRight size={16} />
+                      </motion.div>
+                    </>
+                  )}
                 </motion.button>
               </motion.div>
             </div>
@@ -552,53 +658,99 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileUpload, selectedArea,
         )}
       </motion.div>
 
+      {/* Error Modal */}
       <AnimatePresence>
-        {error && (
-          <motion.div
-            initial={{ opacity: 0, y: 20, height: 0 }}
-            animate={{ opacity: 1, y: 0, height: "auto" }}
-            exit={{ opacity: 0, y: -20, height: 0 }}
-            transition={{ type: "spring", stiffness: 500, damping: 30 }}
-            className="mt-8 p-6 bg-white border border-red-200 rounded-2xl shadow-lg"
-          >
-            <div className="flex items-start">
-              {getErrorIcon()}
-              <div>
-                <h4 className="font-medium text-red-700 mb-2 text-lg">Error al cargar el archivo</h4>
-                <p className="text-red-600">{error}</p>
-              </div>
-            </div>
-
+        {showErrorModal && error && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
             <motion.div
-              className="mt-4 pt-4 border-t border-red-100"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.3 }}
+              className="bg-white rounded-2xl shadow-xl max-w-md w-full overflow-hidden"
+              variants={modalVariants}
+              initial="hidden"
+              animate="visible"
+              exit="exit"
             >
-              <div className="flex items-center gap-2 text-red-500 text-sm">
-                <AlertCircle size={14} />
-                <p>
-                  {errorType === "format"
-                    ? 'Recuerda que solo se aceptan archivos Excel (.xlsx o .xls) con la hoja "Formato programación"'
-                    : errorType === "size"
-                      ? "Intenta comprimir el archivo o dividirlo en partes más pequeñas"
-                      : "Si el problema persiste, contacta al soporte técnico"}
-                </p>
+              {/* Modal header with gradient based on error type */}
+              <div
+                className={`p-6 ${error.type === "format" ? "bg-red-500" : error.type === "size" ? "bg-amber-500" : "bg-red-500"} text-white`}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center">
+                    {error.type === "format" ? (
+                      <FileImage size={24} className="mr-3" />
+                    ) : error.type === "size" ? (
+                      <FileBadge size={24} className="mr-3" />
+                    ) : (
+                      <AlertCircle size={24} className="mr-3" />
+                    )}
+                    <h3 className="text-xl font-bold">{error.title}</h3>
+                  </div>
+                  <motion.button
+                    whileHover={{ scale: 1.1 }}
+                    whileTap={{ scale: 0.9 }}
+                    onClick={() => setShowErrorModal(false)}
+                    className="text-white hover:text-gray-100"
+                  >
+                    <XCircle size={24} />
+                  </motion.button>
+                </div>
               </div>
 
-              <motion.button
-                variants={buttonVariants}
-                initial="idle"
-                whileHover="hover"
-                whileTap="tap"
-                onClick={() => setError(null)}
-                className="mt-4 px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors text-sm font-medium flex items-center gap-2 mx-auto"
-              >
-                <span>Entendido</span>
-                <CheckCircle2 size={14} />
-              </motion.button>
+              {/* Modal body */}
+              <div className="p-6">
+                <div className="mb-6">
+                  <p className="text-gray-800 text-lg mb-4">{error.message}</p>
+
+                  <div className="flex items-start mt-4 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                    <Info size={20} className="text-amber-500 mr-3 flex-shrink-0 mt-0.5" />
+                    <p className="text-amber-700 text-sm">{error.suggestion}</p>
+                  </div>
+                </div>
+
+                {/* Technical details (collapsible) */}
+                {error.technicalDetails && (
+                  <div className="mt-4 pt-4 border-t border-gray-200">
+                    <details className="group">
+                      <summary className="flex items-center cursor-pointer text-sm text-gray-600 hover:text-gray-800">
+                        <ChevronRight size={16} className="mr-2 transition-transform group-open:rotate-90" />
+                        Detalles técnicos
+                      </summary>
+                      <div className="mt-2 pl-6 text-xs text-gray-500 font-mono bg-gray-50 p-3 rounded">
+                        {error.technicalDetails}
+                      </div>
+                    </details>
+                  </div>
+                )}
+
+                {/* Action buttons */}
+                <div className="mt-6 flex justify-end gap-3">
+                  <motion.button
+                    variants={buttonVariants}
+                    initial="idle"
+                    whileHover="hover"
+                    whileTap="tap"
+                    onClick={() => setShowErrorModal(false)}
+                    className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors text-sm font-medium"
+                  >
+                    Cerrar
+                  </motion.button>
+                  <motion.button
+                    variants={buttonVariants}
+                    initial="idle"
+                    whileHover="hover"
+                    whileTap="tap"
+                    onClick={() => {
+                      setShowErrorModal(false)
+                      open()
+                    }}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium flex items-center gap-2"
+                  >
+                    <Upload size={14} />
+                    <span>Intentar de nuevo</span>
+                  </motion.button>
+                </div>
+              </div>
             </motion.div>
-          </motion.div>
+          </div>
         )}
       </AnimatePresence>
 
@@ -612,6 +764,10 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileUpload, selectedArea,
           />
         </div>
       </motion.div>
+
+      <AnimatePresence>
+        {notification && <Notification type={notification.type} message={notification.message} />}
+      </AnimatePresence>
     </motion.div>
   )
 }

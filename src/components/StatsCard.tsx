@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { FileText, Rows, Columns, Database, Clock, Calendar, Users, Briefcase } from 'lucide-react';
+import { FileText,  Clock, Calendar, Users, Briefcase } from 'lucide-react';
 import { ExcelData, AreaType } from '../types';
 
 interface StatsCardProps {
