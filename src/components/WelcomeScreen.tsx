@@ -49,7 +49,7 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onSelectArea }) => {
       bgColor: "bg-blue-100",
       textColor: "text-blue-800",
       borderColor: "border-blue-300",
-      password: "Operaciones123!",
+      password: "Operaciones098!",
     },
     {
       id: "Lavado",
@@ -61,7 +61,7 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onSelectArea }) => {
       bgColor: "bg-cyan-100",
       textColor: "text-cyan-800",
       borderColor: "border-cyan-300",
-      password: "Lavado123!",
+      password: "Lavado567@",
     },
     {
       id: "Mantenimiento",
@@ -73,7 +73,7 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onSelectArea }) => {
       bgColor: "bg-amber-100",
       textColor: "text-amber-800",
       borderColor: "border-amber-300",
-      password: "Mantenimiento123!",
+      password: "Mantenimiento278*",
     },
     {
       id: "Remanofactura",
@@ -85,7 +85,7 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onSelectArea }) => {
       bgColor: "bg-emerald-100",
       textColor: "text-emerald-800",
       borderColor: "border-emerald-300",
-      password: "Remanofactura123!",
+      password: "Remanofactura878?",
     },
     {
       id: "ServiciosGenerales",
@@ -97,7 +97,7 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onSelectArea }) => {
       bgColor: "bg-purple-100",
       textColor: "text-purple-800",
       borderColor: "border-purple-300",
-      password: "ServiciosGenerales123!",
+      password: "ServiciosGenerales741/",
     },
     {
       id: "Vigilantes",
@@ -109,7 +109,7 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onSelectArea }) => {
       bgColor: "bg-red-100",
       textColor: "text-red-800",
       borderColor: "border-red-300",
-      password: "Vigilantes123!",
+      password: "Vigilantes542_",
     },
   ]
 
