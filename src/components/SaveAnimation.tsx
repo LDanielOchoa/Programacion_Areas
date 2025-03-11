@@ -21,18 +21,31 @@ interface SaveAnimationProps {
   area: string
   recordCount: number
   stage: "validating" | "transferring" | "saving"
+  // Add optional callback to notify when animation is complete
+  onComplete?: () => void
+  // Add optional delay before starting animations
+  initialDelay?: number
 }
 
-type ProcessStage = "validating" | "transferring" | "saving" | "complete" | "error"
+type ProcessStage = "initializing" | "validating" | "transferring" | "saving" | "complete" | "error"
 
-const SaveAnimation: React.FC<SaveAnimationProps> = ({ isVisible, area, recordCount, stage: initialStage }) => {
-  const [stage, setStage] = useState<ProcessStage>(initialStage)
+const SaveAnimation: React.FC<SaveAnimationProps> = ({
+  isVisible,
+  area,
+  recordCount,
+  stage: initialStage,
+  onComplete,
+  initialDelay = 800, // Default delay of 800ms before starting animations
+}) => {
+  const [stage, setStage] = useState<ProcessStage>("initializing")
   const [progress, setProgress] = useState(0)
   const [validatedCount, setValidatedCount] = useState(0)
   const [transferredCount, setTransferredCount] = useState(0)
+  const [isReady, setIsReady] = useState(false)
 
   // Refs for animation intervals
   const progressRef = useRef<NodeJS.Timeout | null>(null)
+  const stageTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   // Disable body scrolling when animation is visible
   useEffect(() => {
@@ -47,14 +60,26 @@ const SaveAnimation: React.FC<SaveAnimationProps> = ({ isVisible, area, recordCo
     }
   }, [isVisible])
 
-  // Update stage when prop changes
+  // Initialize with delay to ensure data is loaded
   useEffect(() => {
-    setStage(initialStage)
-  }, [initialStage])
+    if (isVisible) {
+      // Start with initializing stage
+      setStage("initializing")
+
+      // Add delay before starting the actual animation sequence
+      const timeout = setTimeout(() => {
+        setIsReady(true)
+        setStage(initialStage)
+      }, initialDelay)
+
+      return () => clearTimeout(timeout)
+    }
+  }, [isVisible, initialStage, initialDelay])
 
   // Clean up all animations
   const cleanupAnimations = useCallback(() => {
     if (progressRef.current) clearInterval(progressRef.current)
+    if (stageTimeoutRef.current) clearTimeout(stageTimeoutRef.current)
   }, [])
 
   // Cleanup on unmount
@@ -110,6 +135,8 @@ const SaveAnimation: React.FC<SaveAnimationProps> = ({ isVisible, area, recordCo
 
     // Modify theme based on current stage
     switch (stage) {
+      case "initializing":
+        return areaTheme
       case "complete":
         return {
           primary: "#10b981", // emerald-500
@@ -134,6 +161,12 @@ const SaveAnimation: React.FC<SaveAnimationProps> = ({ isVisible, area, recordCo
   // Get stage information
   const getStageInfo = () => {
     switch (stage) {
+      case "initializing":
+        return {
+          title: "Inicializando proceso",
+          description: "Preparando el entorno para procesar los datos...",
+          icon: Loader2,
+        }
       case "validating":
         return {
           title: "Validando empleados",
@@ -178,15 +211,17 @@ const SaveAnimation: React.FC<SaveAnimationProps> = ({ isVisible, area, recordCo
 
   // Main animation sequence
   useEffect(() => {
-    if (!isVisible) return
+    if (!isVisible || !isReady) return
 
     // Clean up previous animations
     cleanupAnimations()
 
-    // Reset state
-    setProgress(0)
-    setValidatedCount(0)
-    setTransferredCount(0)
+    // Reset state for new animation sequence
+    if (stage === "validating") {
+      setProgress(0)
+      setValidatedCount(0)
+      setTransferredCount(0)
+    }
 
     // Start animation based on current stage
     const runAnimation = () => {
@@ -203,73 +238,84 @@ const SaveAnimation: React.FC<SaveAnimationProps> = ({ isVisible, area, recordCo
       }
     }
 
-    // Validation stage animation
+    // Validation stage animation - slower and more deliberate
     const startValidation = () => {
       let currentProgress = 0
+      // Slow down validation to ensure data is properly loaded
+      const incrementAmount = 0.7 // Reduced increment amount
+      const interval = 60 // Increased interval time
 
       progressRef.current = setInterval(() => {
-        currentProgress += 1
+        currentProgress += incrementAmount
         setProgress(Math.min(currentProgress, 100))
 
-        // Update validated count
+        // Update validated count more gradually
         const newValidatedCount = Math.floor((currentProgress / 100) * Math.min(recordCount, 20))
         setValidatedCount(newValidatedCount)
 
         if (currentProgress >= 100) {
           clearInterval(progressRef.current!)
 
-          // Move to next stage after a short delay
-          setTimeout(() => {
+          // Longer delay before moving to next stage
+          stageTimeoutRef.current = setTimeout(() => {
             setStage("transferring")
-            startTransfer()
-          }, 500)
+          }, 800) // Increased delay
         }
-      }, 50)
+      }, interval)
     }
 
-    // Transfer stage animation
+    // Transfer stage animation - more gradual
     const startTransfer = () => {
       setProgress(0)
       let currentProgress = 0
+      // Slow down transfer stage
+      const incrementAmount = 0.5 // Reduced increment amount
+      const interval = 50 // Increased interval time
 
       progressRef.current = setInterval(() => {
-        currentProgress += 0.8
+        currentProgress += incrementAmount
         setProgress(Math.min(currentProgress, 100))
 
-        // Update transferred count
+        // Update transferred count more gradually
         const newTransferredCount = Math.floor((currentProgress / 100) * recordCount)
         setTransferredCount(newTransferredCount)
 
         if (currentProgress >= 100) {
           clearInterval(progressRef.current!)
 
-          // Move to next stage after a short delay
-          setTimeout(() => {
+          // Longer delay before moving to next stage
+          stageTimeoutRef.current = setTimeout(() => {
             setStage("saving")
-            startSaving()
-          }, 500)
+          }, 800) // Increased delay
         }
-      }, 40)
+      }, interval)
     }
 
-    // Saving stage animation
+    // Saving stage animation - even more gradual for final stage
     const startSaving = () => {
       setProgress(0)
       let currentProgress = 0
+      // Slow down saving stage significantly
+      const incrementAmount = 0.3 // Reduced increment amount
+      const interval = 60 // Increased interval time
 
       progressRef.current = setInterval(() => {
-        currentProgress += 0.6
+        currentProgress += incrementAmount
         setProgress(Math.min(currentProgress, 100))
 
         if (currentProgress >= 100) {
           clearInterval(progressRef.current!)
 
-          // Complete the animation
-          setTimeout(() => {
+          // Longer delay before completing
+          stageTimeoutRef.current = setTimeout(() => {
             setStage("complete")
-          }, 500)
+            // Notify parent component that animation is complete
+            if (onComplete) {
+              onComplete()
+            }
+          }, 1000) // Increased delay
         }
-      }, 30)
+      }, interval)
     }
 
     runAnimation()
@@ -277,7 +323,7 @@ const SaveAnimation: React.FC<SaveAnimationProps> = ({ isVisible, area, recordCo
     return () => {
       cleanupAnimations()
     }
-  }, [isVisible, stage, recordCount, cleanupAnimations])
+  }, [isVisible, stage, recordCount, cleanupAnimations, isReady, onComplete])
 
   // If not visible, don't render anything
   if (!isVisible) return null
@@ -288,6 +334,7 @@ const SaveAnimation: React.FC<SaveAnimationProps> = ({ isVisible, area, recordCo
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
+      transition={{ duration: 0.4 }} // Slightly slower transition
     >
       {/* Backdrop with blur */}
       <motion.div
@@ -295,6 +342,7 @@ const SaveAnimation: React.FC<SaveAnimationProps> = ({ isVisible, area, recordCo
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
+        transition={{ duration: 0.4 }} // Slightly slower transition
       />
 
       {/* Main content container */}
@@ -303,14 +351,14 @@ const SaveAnimation: React.FC<SaveAnimationProps> = ({ isVisible, area, recordCo
           className="w-full overflow-hidden"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3 }}
+          transition={{ duration: 0.5, delay: 0.1 }} // Slightly slower with delay
         >
           {/* Card */}
           <motion.div
             className="bg-white rounded-xl shadow-xl overflow-hidden"
             initial={{ scale: 0.95 }}
             animate={{ scale: 1 }}
-            transition={{ type: "spring", stiffness: 300, damping: 30 }}
+            transition={{ type: "spring", stiffness: 200, damping: 25 }} // Softer spring animation
           >
             {/* Header section */}
             <div className="relative p-6 pb-4 border-b" style={{ borderColor: `${theme.light}` }}>
@@ -323,11 +371,36 @@ const SaveAnimation: React.FC<SaveAnimationProps> = ({ isVisible, area, recordCo
                   }}
                   initial={{ scale: 0.8 }}
                   animate={{ scale: 1 }}
-                  transition={{ type: "spring", damping: 12 }}
+                  transition={{ type: "spring", damping: 10, stiffness: 100 }} // Softer spring
                 >
+                  {/* Pulsing background for icon */}
                   <motion.div
-                    animate={stage !== "complete" && stage !== "error" ? { rotate: 360 } : {}}
-                    transition={{ duration: 3, repeat: Number.POSITIVE_INFINITY, ease: "linear" }}
+                    className="absolute inset-0 rounded-full"
+                    style={{ backgroundColor: theme.light }}
+                    animate={
+                      stage !== "complete" && stage !== "error"
+                        ? {
+                            scale: [1, 1.15, 1],
+                            opacity: [1, 0.7, 1],
+                          }
+                        : {}
+                    }
+                    transition={{ duration: 2, repeat: Number.POSITIVE_INFINITY, ease: "easeInOut" }}
+                  />
+
+                  <motion.div
+                    animate={
+                      stage !== "complete" && stage !== "error"
+                        ? { rotate: 360 }
+                        : stage === "complete"
+                          ? { scale: [1, 1.2, 1] }
+                          : {}
+                    }
+                    transition={
+                      stage !== "complete" && stage !== "error"
+                        ? { duration: 3, repeat: Number.POSITIVE_INFINITY, ease: "linear" }
+                        : { duration: 0.5, repeat: 3, repeatType: "reverse" }
+                    }
                   >
                     <StageIcon style={{ color: theme.primary }} size={28} />
                   </motion.div>
@@ -339,7 +412,8 @@ const SaveAnimation: React.FC<SaveAnimationProps> = ({ isVisible, area, recordCo
                     className="text-xl font-bold text-gray-800 mb-1"
                     initial={{ opacity: 0, x: -5 }}
                     animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: 0.1 }}
+                    transition={{ delay: 0.2 }}
+                    key={stageInfo.title} // Force re-animation when title changes
                   >
                     {stageInfo.title}
                   </motion.h2>
@@ -348,7 +422,8 @@ const SaveAnimation: React.FC<SaveAnimationProps> = ({ isVisible, area, recordCo
                     className="text-gray-600 text-sm"
                     initial={{ opacity: 0, x: -5 }}
                     animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: 0.2 }}
+                    transition={{ delay: 0.3 }}
+                    key={stageInfo.description} // Force re-animation when description changes
                   >
                     {stageInfo.description}
                   </motion.p>
@@ -365,19 +440,28 @@ const SaveAnimation: React.FC<SaveAnimationProps> = ({ isVisible, area, recordCo
                   <span>{Math.round(progress)}%</span>
                 </div>
 
-                <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden">
+                <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
+                  {" "}
+                  {/* Slightly taller progress bar */}
                   <motion.div
                     className="h-full rounded-full relative overflow-hidden"
                     style={{ backgroundColor: theme.primary }}
                     initial={{ width: "0%" }}
                     animate={{ width: `${progress}%` }}
-                    transition={{ duration: 0.2 }}
+                    transition={{ duration: 0.3 }} // Slightly slower transition
                   >
-                    {/* Animated shine effect */}
+                    {/* Enhanced shine effect */}
                     <motion.div
-                      className="absolute inset-0 w-16 h-full bg-white/30 skew-x-12"
-                      animate={{ x: [-80, 400] }}
-                      transition={{ duration: 1.5, repeat: Number.POSITIVE_INFINITY, repeatDelay: 0.5 }}
+                      className="absolute inset-0 w-20 h-full bg-white/30 skew-x-12"
+                      animate={{ x: [-100, 500] }}
+                      transition={{ duration: 2, repeat: Number.POSITIVE_INFINITY, repeatDelay: 0.7 }}
+                    />
+
+                    {/* Secondary shine effect for more visual interest */}
+                    <motion.div
+                      className="absolute inset-0 w-10 h-full bg-white/20 skew-x-12"
+                      animate={{ x: [-50, 500] }}
+                      transition={{ duration: 1.5, repeat: Number.POSITIVE_INFINITY, repeatDelay: 0.5, delay: 0.3 }}
                     />
                   </motion.div>
                 </div>
@@ -385,6 +469,51 @@ const SaveAnimation: React.FC<SaveAnimationProps> = ({ isVisible, area, recordCo
 
               {/* Visualization area - changes based on current stage */}
               <AnimatePresence mode="wait">
+                {/* Initializing stage visualization */}
+                {stage === "initializing" && (
+                  <motion.div
+                    key="initializing"
+                    className="mb-6 flex justify-center items-center py-8"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.4 }}
+                  >
+                    <motion.div
+                      className="relative"
+                      animate={{ rotate: 360 }}
+                      transition={{ duration: 2, repeat: Number.POSITIVE_INFINITY, ease: "linear" }}
+                    >
+                      <Loader2 size={40} style={{ color: theme.primary }} />
+                    </motion.div>
+
+                    {/* Pulsing circles for more visual interest */}
+                    <motion.div
+                      className="absolute rounded-full"
+                      style={{
+                        width: 80,
+                        height: 80,
+                        border: `2px solid ${theme.primary}`,
+                        opacity: 0.3,
+                      }}
+                      animate={{ scale: [1, 1.5], opacity: [0.3, 0] }}
+                      transition={{ duration: 1.5, repeat: Number.POSITIVE_INFINITY, ease: "easeOut" }}
+                    />
+
+                    <motion.div
+                      className="absolute rounded-full"
+                      style={{
+                        width: 60,
+                        height: 60,
+                        border: `2px solid ${theme.primary}`,
+                        opacity: 0.5,
+                      }}
+                      animate={{ scale: [1, 1.8], opacity: [0.5, 0] }}
+                      transition={{ duration: 1.8, repeat: Number.POSITIVE_INFINITY, ease: "easeOut", delay: 0.3 }}
+                    />
+                  </motion.div>
+                )}
+
                 {/* Validation stage visualization */}
                 {stage === "validating" && (
                   <motion.div
@@ -393,7 +522,7 @@ const SaveAnimation: React.FC<SaveAnimationProps> = ({ isVisible, area, recordCo
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -10 }}
-                    transition={{ duration: 0.3 }}
+                    transition={{ duration: 0.4 }}
                   >
                     <h3 className="text-gray-700 font-medium mb-3 text-sm">Validación de empleados</h3>
 
@@ -415,7 +544,7 @@ const SaveAnimation: React.FC<SaveAnimationProps> = ({ isVisible, area, recordCo
                               scale: 1,
                               opacity: 1,
                             }}
-                            transition={{ delay: i * 0.01 }}
+                            transition={{ delay: i * 0.02 }} // Slightly slower appearance
                           >
                             <User
                               size={16}
@@ -427,12 +556,12 @@ const SaveAnimation: React.FC<SaveAnimationProps> = ({ isVisible, area, recordCo
 
                             {isValidated && (
                               <motion.div
-                                className="absolute bottom-0.5 right-0.5 bg-white rounded-full w-3 h-3 flex items-center justify-center"
+                                className="absolute bottom-0.5 right-0.5 bg-white rounded-full w-3.5 h-3.5 flex items-center justify-center shadow-sm"
                                 initial={{ scale: 0 }}
                                 animate={{ scale: 1 }}
-                                transition={{ type: "spring", damping: 12 }}
+                                transition={{ type: "spring", damping: 10, delay: 0.1 }}
                               >
-                                <CheckCircle size={10} style={{ color: theme.primary }} />
+                                <CheckCircle size={12} style={{ color: theme.primary }} />
                               </motion.div>
                             )}
                           </motion.div>
@@ -456,53 +585,57 @@ const SaveAnimation: React.FC<SaveAnimationProps> = ({ isVisible, area, recordCo
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -10 }}
-                    transition={{ duration: 0.3 }}
+                    transition={{ duration: 0.4 }}
                   >
                     <h3 className="text-gray-700 font-medium mb-4 text-sm">
                       {stage === "transferring" ? "Transferencia de datos" : "Guardando en base de datos"}
                     </h3>
 
                     {/* Data flow visualization */}
-                    <div className="relative h-24 mb-4">
+                    <div className="relative h-28 mb-4">
+                      {" "}
+                      {/* Slightly taller container */}
                       <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 flex items-center justify-between">
                         {/* Source */}
                         <div className="flex flex-col items-center">
                           <motion.div
-                            className="w-16 h-16 rounded-lg bg-gray-50 border border-gray-200 flex items-center justify-center mb-2"
+                            className="w-18 h-18 rounded-lg bg-gray-50 border border-gray-200 flex items-center justify-center mb-2"
                             animate={
                               stage === "transferring"
                                 ? {
                                     boxShadow: [
                                       `0 0 0 rgba(${theme.primary}, 0)`,
-                                      `0 0 10px ${theme.primary}40`,
+                                      `0 0 15px ${theme.primary}40`,
                                       `0 0 0 rgba(${theme.primary}, 0)`,
                                     ],
                                   }
                                 : {}
                             }
-                            transition={{ duration: 1.5, repeat: Number.POSITIVE_INFINITY }}
+                            transition={{ duration: 2, repeat: Number.POSITIVE_INFINITY }}
                           >
-                            <FileSpreadsheet size={24} className="text-gray-600" />
+                            <FileSpreadsheet size={28} className="text-gray-600" /> {/* Slightly larger icon */}
                           </motion.div>
                           <span className="text-xs text-gray-500">Excel</span>
                         </div>
 
                         {/* Connection line */}
                         <div className="flex-1 mx-4 relative">
-                          <div className="h-1 bg-gray-200 rounded-full">
+                          <div className="h-1.5 bg-gray-200 rounded-full">
+                            {" "}
+                            {/* Slightly thicker line */}
                             <motion.div
-                              className="absolute top-0 h-1 rounded-full"
+                              className="absolute top-0 h-1.5 rounded-full"
                               style={{ backgroundColor: theme.primary }}
                               initial={{ width: "0%" }}
                               animate={{ width: stage === "transferring" ? `${progress}%` : "100%" }}
                             />
                           </div>
 
-                          {/* Data packets */}
-                          {Array.from({ length: 3 }, (_, i) => (
+                          {/* More data packets for visual interest */}
+                          {Array.from({ length: 5 }, (_, i) => (
                             <motion.div
                               key={`packet-${i}`}
-                              className="absolute top-1/2 -translate-y-1/2 w-2 h-2 rounded-full"
+                              className="absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full"
                               style={{ backgroundColor: theme.primary }}
                               initial={{ left: "0%", opacity: 0 }}
                               animate={{
@@ -510,9 +643,9 @@ const SaveAnimation: React.FC<SaveAnimationProps> = ({ isVisible, area, recordCo
                                 opacity: [0, 1, 0],
                               }}
                               transition={{
-                                duration: 2,
+                                duration: 2.5, // Slower packet movement
                                 repeat: Number.POSITIVE_INFINITY,
-                                delay: i * 0.6,
+                                delay: i * 0.5, // More spaced out
                                 ease: "easeInOut",
                               }}
                             />
@@ -520,37 +653,37 @@ const SaveAnimation: React.FC<SaveAnimationProps> = ({ isVisible, area, recordCo
 
                           {/* Direction indicator */}
                           <motion.div
-                            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-full p-1 shadow-sm"
+                            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-full p-1.5 shadow-sm"
                             animate={{
-                              scale: [1, 1.1, 1],
+                              scale: [1, 1.15, 1],
                             }}
-                            transition={{ duration: 1.5, repeat: Number.POSITIVE_INFINITY }}
+                            transition={{ duration: 1.8, repeat: Number.POSITIVE_INFINITY }}
                           >
-                            <ArrowRight size={12} style={{ color: theme.primary }} />
+                            <ArrowRight size={14} style={{ color: theme.primary }} /> {/* Slightly larger icon */}
                           </motion.div>
                         </div>
 
                         {/* Destination */}
                         <div className="flex flex-col items-center">
                           <motion.div
-                            className="w-16 h-16 rounded-lg bg-gray-50 border border-gray-200 flex items-center justify-center mb-2"
+                            className="w-18 h-18 rounded-lg bg-gray-50 border border-gray-200 flex items-center justify-center mb-2"
                             animate={
                               stage === "saving"
                                 ? {
                                     boxShadow: [
                                       `0 0 0 rgba(${theme.primary}, 0)`,
-                                      `0 0 10px ${theme.primary}40`,
+                                      `0 0 15px ${theme.primary}40`,
                                       `0 0 0 rgba(${theme.primary}, 0)`,
                                     ],
                                   }
                                 : {}
                             }
-                            transition={{ duration: 1.5, repeat: Number.POSITIVE_INFINITY }}
+                            transition={{ duration: 2, repeat: Number.POSITIVE_INFINITY }}
                           >
                             {stage === "transferring" ? (
-                              <Server size={24} className="text-gray-600" />
+                              <Server size={28} className="text-gray-600" /> // Slightly larger icon
                             ) : (
-                              <Database size={24} className="text-gray-600" />
+                              <Database size={28} className="text-gray-600" /> // Slightly larger icon
                             )}
                           </motion.div>
                           <span className="text-xs text-gray-500">
@@ -561,10 +694,20 @@ const SaveAnimation: React.FC<SaveAnimationProps> = ({ isVisible, area, recordCo
                     </div>
 
                     {/* Data processing stats */}
-                    <div className="bg-gray-50 rounded-lg p-3 flex items-center justify-between">
+                    <div className="bg-gray-50 rounded-lg p-4 flex items-center justify-between">
+                      {" "}
+                      {/* Slightly larger padding */}
                       <div className="flex items-center">
-                        <Zap size={16} style={{ color: theme.primary }} className="mr-2" />
-                        <span className="text-gray-600 text-sm">
+                        <motion.div
+                          animate={stage === "transferring" || stage === "saving" ? { rotate: [0, 20, 0, -20, 0] } : {}}
+                          transition={{ duration: 1.5, repeat: Number.POSITIVE_INFINITY, repeatDelay: 1 }}
+                        >
+                          <Zap size={18} style={{ color: theme.primary }} className="mr-2" />{" "}
+                          {/* Slightly larger icon */}
+                        </motion.div>
+                        <span className="text-gray-600 text-sm font-medium">
+                          {" "}
+                          {/* Added font-medium */}
                           {stage === "transferring" ? "Transfiriendo" : "Guardando"}
                         </span>
                       </div>
@@ -580,29 +723,36 @@ const SaveAnimation: React.FC<SaveAnimationProps> = ({ isVisible, area, recordCo
                 {stage === "complete" && (
                   <motion.div
                     key="complete"
-                    className="mb-6 bg-emerald-50 rounded-lg p-4"
+                    className="mb-6 bg-emerald-50 rounded-lg p-5" // Slightly larger padding
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -10 }}
-                    transition={{ duration: 0.3 }}
+                    transition={{ duration: 0.4 }}
                   >
                     <div className="flex items-center">
                       <motion.div
-                        className="relative mr-4"
+                        className="relative mr-5" // Slightly larger margin
                         initial={{ scale: 0 }}
                         animate={{ scale: 1 }}
-                        transition={{ type: "spring", damping: 8 }}
+                        transition={{ type: "spring", damping: 6, stiffness: 100 }} // Bouncier animation
                       >
-                        <CheckCircle size={32} className="text-emerald-500" />
-
-                        {/* Success pulse effect */}
+                        <CheckCircle size={36} className="text-emerald-500" /> {/* Larger icon */}
+                        {/* Multiple success pulse effects for more visual interest */}
                         <motion.div
-                          className="absolute -inset-1.5 rounded-full bg-emerald-500/20"
+                          className="absolute -inset-2 rounded-full bg-emerald-500/20"
                           animate={{
-                            scale: [1, 1.5],
-                            opacity: [0.5, 0],
+                            scale: [1, 1.8],
+                            opacity: [0.6, 0],
                           }}
                           transition={{ duration: 1.5, repeat: Number.POSITIVE_INFINITY }}
+                        />
+                        <motion.div
+                          className="absolute -inset-3 rounded-full bg-emerald-500/10"
+                          animate={{
+                            scale: [1, 2],
+                            opacity: [0.4, 0],
+                          }}
+                          transition={{ duration: 2, repeat: Number.POSITIVE_INFINITY, delay: 0.3 }}
                         />
                       </motion.div>
 
@@ -617,7 +767,7 @@ const SaveAnimation: React.FC<SaveAnimationProps> = ({ isVisible, area, recordCo
 
               {/* Area and record count info */}
               <div
-                className="flex justify-between items-center text-xs text-gray-500 border-t pt-3"
+                className="flex justify-between items-center text-xs text-gray-500 border-t pt-4" // Slightly larger padding
                 style={{ borderColor: `${theme.light}` }}
               >
                 <div>
