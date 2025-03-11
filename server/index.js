@@ -107,7 +107,7 @@ app.post('/api/validate-employees', async (req, res) => {
             CHAR(160), 
             ''
           )
-        ) IN (?);
+        ) IN (${placeholders});
     `;
 
     console.log('[INFO] Ejecutando consulta MySQL:', query);
