@@ -16,20 +16,20 @@ const dbConfig = {
   user: process.env.DB_USER || 'root',
   password: process.env.DB_PASSWORD || 'vweBcUhlUkhjGenFhVPJpjKhSoRVpOVr',
   database: process.env.DB_NAME || 'railway',
-  port: 55308, // Agregar puerto explícito
+  port: 55308, 
   waitForConnections: true,
   connectionLimit: 10,
-  connectTimeout: 30000 // Aumentar tiempo de conexión
+  connectTimeout: 30000 
 };
 
 const pool = mysql.createPool(dbConfig);
 
 const secondaryDbConfig = {
-  host: process.env.SQL_DB_HOST || 'maglev.proxy.rlwy.net', // Cambiar server -> host
+  host: process.env.SQL_DB_HOST || 'maglev.proxy.rlwy.net', 
   user: process.env.SQL_DB_USER || 'root',
   password: process.env.SQL_DB_PASSWORD || 'vweBcUhlUkhjGenFhVPJpjKhSoRVpOVr',
   database: process.env.SQL_DB_NAME || 'railway',
-  port: 55308, // Puerto explícito para MySQL
+  port: 55308, 
   waitForConnections: true,
   connectionLimit: 10,
   connectTimeout: 30000 // Aumentar tiempo de espera
@@ -91,10 +91,23 @@ app.post('/api/validate-employees', async (req, res) => {
     const placeholders = cedulas.map(() => '?').join(',');
     // Consulta SQL CORREGIDA
     const query = `
-      SELECT 
-        TRIM(REPLACE(F200_NIT, CHAR(160), ' ')) AS F200_ID
-      FROM personas_validas
-      WHERE TRIM(REPLACE(F200_NIT, CHAR(160), ' ')) IN (${placeholders})
+      SELECT
+        TRIM(
+          REPLACE(
+            CONVERT(F200_NIT USING latin1), -- Primero interpreta el binario como latin1
+            CHAR(160), 
+            ''
+          )
+        ) AS F200_ID 
+      FROM personas_validas 
+      WHERE 
+        TRIM(
+          REPLACE(
+            CONVERT(F200_NIT USING latin1), 
+            CHAR(160), 
+            ''
+          )
+        ) IN (?);
     `;
 
     console.log('[INFO] Ejecutando consulta MySQL:', query);

@@ -14,8 +14,7 @@ const DateExistModal: React.FC<DateExistModalProps> = ({
   isVisible, 
   onClose, 
   existingDates,
-  area,
-  onProceed
+  area
 }) => {
   if (!isVisible) return null;
 
@@ -40,18 +39,6 @@ const DateExistModal: React.FC<DateExistModalProps> = ({
       case 'ServiciosGenerales': return 'bg-purple-50 text-purple-800 border-purple-200';
       case 'Vigilantes': return 'bg-red-50 text-red-800 border-red-200';
       default: return 'bg-green-50 text-green-800 border-green-200';
-    }
-  };
-
-  const getButtonColor = () => {
-    switch (area) {
-      case 'Operaciones': return 'bg-blue-600 hover:bg-blue-700';
-      case 'Lavado': return 'bg-cyan-600 hover:bg-cyan-700';
-      case 'Mantenimiento': return 'bg-amber-600 hover:bg-amber-700';
-      case 'Remanofactura': return 'bg-emerald-600 hover:bg-emerald-700';
-      case 'ServiciosGenerales': return 'bg-purple-600 hover:bg-purple-700';
-      case 'Vigilantes': return 'bg-red-600 hover:bg-red-700';
-      default: return 'bg-green-600 hover:bg-green-700';
     }
   };
 
@@ -118,7 +105,6 @@ const DateExistModal: React.FC<DateExistModalProps> = ({
               <div className="p-6 max-h-[60vh] overflow-y-auto">
                 <p className="text-gray-700 mb-4">
                   Se encontraron <span className="font-bold">{existingDates.length}</span> fechas que ya existen en la base de datos para esta área. 
-                  Si continúa, podría haber duplicación de datos.
                 </p>
                 
                 <div className="space-y-3">
@@ -147,12 +133,6 @@ const DateExistModal: React.FC<DateExistModalProps> = ({
                   className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg shadow-md transition-colors hover:bg-gray-300"
                 >
                   Cancelar
-                </button>
-                <button
-                  onClick={onProceed}
-                  className={`px-4 py-2 ${getButtonColor()} text-white rounded-lg shadow-md transition-colors`}
-                >
-                  Continuar de todos modos
                 </button>
               </div>
             </motion.div>
