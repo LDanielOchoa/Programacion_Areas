@@ -38,21 +38,7 @@ const secondaryDbConfig = {
 const secondaryPool = mysql.createPool(secondaryDbConfig);
 
 
-app.get('/api/test-connection', async (req, res) => {
-  try {
-    console.log('[INFO] Testing MySQL connection...');
-    const connection = await pool.getConnection();
-    connection.release();
-    console.log('[INFO] MySQL connection successful');
-    res.status(200).json({ message: 'Database connection successful' });
-  } catch (error) {
-    console.error('[ERROR] MySQL connection error:', error);
-    res.status(500).json({ error: 'Failed to connect to database', details: error.message });
-  }
-});
-
 app.post('/api/validate-employees', async (req, res) => {
-    // Para diagnóstico rápido, agrega esto al inicio:
   console.log('Configuración BD principal:', dbConfig);
   console.log('Configuración BD secundaria:', secondaryDbConfig);
   const { employees } = req.body;
@@ -263,8 +249,6 @@ app.post('/api/check-dates', async (req, res) => {
   }
 });
 
-
-
 app.post('/api/save-schedule', async (req, res) => {
   const records = req.body.records; 
   const currentYear = new Date().getFullYear();
@@ -309,7 +293,6 @@ app.post('/api/save-schedule', async (req, res) => {
           clasificacion VARCHAR(100) NOT NULL,
           fecha_consulta DATETIME NOT NULL,
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          UNIQUE KEY unique_schedule (CEDULA, Fecha_programacion, Area)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
       `);
       console.log('[INFO] Tabla creada exitosamente');
@@ -434,6 +417,175 @@ app.post('/api/save-schedule', async (req, res) => {
   }
 });
 
+app.post('/api/save-novedades', async (req, res) => {
+  const records = req.body.records;
+  const currentYear = new Date().getFullYear();
+  
+  console.log('[INFO] Recibidos registros para guardar novedades:', records.length);
+
+  let connection;
+  try {
+    console.log('[INFO] Intentando conectar a MySQL...');
+    connection = await pool.getConnection();
+    console.log('[INFO] Conexión a MySQL establecida');
+
+    // Verificar y crear tabla si no existe
+    console.log('[INFO] Verificando estructura de la tabla...');
+    const [tables] = await connection.execute(`
+      SELECT TABLE_NAME 
+      FROM information_schema.tables 
+      WHERE table_schema = ? 
+      AND table_name = 'novedades_programacion_empleados'
+    `, [dbConfig.database]);
+
+    if (tables.length === 0) {
+      console.log('[INFO] Creando tabla novedades_programacion_empleados...');
+      await connection.execute(`
+        CREATE TABLE novedades_programacion_empleados (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          FECHA_PROGRAMACION DATE NOT NULL,
+          CEDULA INT NOT NULL,
+          TIPO_NOVEDAD TEXT NOT NULL,
+          FECHA_HORA_EXTRA DATE,
+          HORA_INICIO_FIN TEXT,
+          MOTIVO TEXT,
+          CEDULA_AUTORIZA INT,
+          AREA TEXT NOT NULL,
+          QUINCENA TEXT NOT NULL,
+          TIEMPO_DESCONTAR DOUBLE DEFAULT NULL,
+          FECHA_CONSULTA DATETIME NOT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+      `);
+      console.log('[INFO] Tabla creada exitosamente');
+    }
+
+    // Validar y preparar datos
+    console.log('[INFO] Validando registros...');
+    const values = [];
+    const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
+    
+    for (const [index, record] of records.entries()) {
+      try {
+        // Validar CEDULA
+        const cedula = Number(record.CEDULA);
+        if (isNaN(cedula)) {
+          throw new Error(`CEDULA inválida: ${record.CEDULA}`);
+        }
+
+        // Validar fecha programación
+        const fechaProg = new Date(record.FECHA_PROGRAMACION);
+        if (isNaN(fechaProg.getTime())) {
+          throw new Error(`Fecha de programación inválida: ${record.FECHA_PROGRAMACION}`);
+        }
+
+        // Validar fecha hora extra si existe
+        let fechaHoraExtra = null;
+        if (record.FECHA_HORA_EXTRA) {
+          fechaHoraExtra = new Date(record.FECHA_HORA_EXTRA);
+          if (isNaN(fechaHoraExtra.getTime())) {
+            throw new Error(`Fecha hora extra inválida: ${record.FECHA_HORA_EXTRA}`);
+          }
+        }
+
+        values.push([
+          fechaProg.toISOString().split('T')[0],
+          cedula,
+          record.TIPO_NOVEDAD,
+          fechaHoraExtra ? fechaHoraExtra.toISOString().split('T')[0] : null,
+          record.HORA_INICIO_FIN || null,
+          record.MOTIVO || null,
+          record.CEDULA_AUTORIZA || null,
+          record.AREA,
+          record.QUINCENA,
+          record.TIEMPO_DESCONTAR || 0,
+          now
+        ]);
+
+      } catch (validationError) {
+        console.error(`[ERROR] Error en registro ${index + 1}:`, validationError.message);
+        return res.status(400).json({
+          error: 'Error de validación de datos',
+          details: validationError.message,
+          failedRecord: record,
+          recordIndex: index
+        });
+      }
+    }
+
+    // Transacción de inserción
+    console.log('[INFO] Iniciando transacción...');
+    await connection.beginTransaction();
+
+    try {
+      console.log('[INFO] Insertando registros...');
+      const [result] = await connection.query(
+        `INSERT INTO novedades_programacion_empleados 
+        (FECHA_PROGRAMACION, CEDULA, TIPO_NOVEDAD, FECHA_HORA_EXTRA, 
+         HORA_INICIO_FIN, MOTIVO, CEDULA_AUTORIZA, AREA, 
+         QUINCENA, TIEMPO_DESCONTAR, FECHA_CONSULTA)
+        VALUES ?`,
+        [values]
+      );
+
+      console.log('[INFO] Confirmando transacción...');
+      await connection.commit();
+
+      console.log('[INFO] Registros insertados:', result.affectedRows);
+      res.status(200).json({
+        success: true,
+        message: 'Datos guardados exitosamente',
+        recordCount: result.affectedRows
+      });
+
+    } catch (insertError) {
+      console.error('[ERROR] Error en inserción:', insertError);
+      await connection.rollback();
+      
+      if (insertError.code === 'ER_DUP_ENTRY') {
+        const match = insertError.message.match(/Duplicate entry '(.+)' for key/);
+        return res.status(409).json({
+          error: 'Registro duplicado',
+          details: match ? `Conflicto en: ${match[1]}` : insertError.message
+        });
+      }
+
+      res.status(500).json({
+        error: 'Error al guardar los datos',
+        details: insertError.message,
+        sqlCode: insertError.code
+      });
+    }
+
+  } catch (connectionError) {
+    console.error('[ERROR] Error de conexión:', connectionError);
+    
+    const errorResponse = {
+      error: 'Error de conexión a la base de datos',
+      details: connectionError.message,
+      code: connectionError.code
+    };
+
+    if (process.env.NODE_ENV === 'development') {
+      errorResponse.stack = connectionError.stack;
+      errorResponse.config = {
+        database: dbConfig.database,
+        host: dbConfig.host,
+        port: dbConfig.port
+      };
+    }
+
+    res.status(500).json(errorResponse);
+
+  } finally {
+    if (connection) {
+      connection.release();
+      console.log('[INFO] Conexión liberada');
+    }
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
+

@@ -7,3 +7,4 @@ export { default as SaveAnimation } from './SaveAnimation';
 export { default as EmployeeValidationModal } from './EmployeeValidationModal';
 export { default as DateExistModal } from './DateExistModal';
 export { default as PasswordModal } from './PasswordModal';
+export { default as NovedadesTable } from './NovedadesTable';

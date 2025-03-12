@@ -1,22 +1,27 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { Leaf, Loader2, AlertTriangle } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
-import { FileUploader, DataTable, StatsCard, WelcomeScreen } from "./components"
-import { parseExcelFile } from "./utils/excelParser"
-import type { ExcelData, AreaType } from "./types"
-import { Loader2, AlertTriangle, Leaf } from "lucide-react"
 import { ToastContainer } from "react-toastify"
+import { parseExcelFile } from "./utils/excelParser"
+import WelcomeScreen from "./components/WelcomeScreen"
+import FileUploader from "./components/FileUploader"
+import DataTable from "./components/DataTable"
+import NovedadesTable from "./components/NovedadesTable"
+import StatsCard from "./components/StatsCard"
+import type { ExcelData, AreaType, ScheduleType } from "./types"
 import "react-toastify/dist/ReactToastify.css"
 
-function App() {
-  const [excelData, setExcelData] = useState<ExcelData | null>(null)
-  const [fileName, setFileName] = useState<string | null>(null)
-  const [loading, setLoading] = useState<boolean>(false)
-  const [error, setError] = useState<string | null>(null)
-  const [selectedArea, setSelectedArea] = useState<AreaType | null>(null)
+const App = () => {
   const [step, setStep] = useState<"welcome" | "upload" | "results">("welcome")
-  const [theme, setTheme] = useState<string>("green")
+  const [selectedArea, setSelectedArea] = useState<AreaType | null>(null)
+  const [scheduleType, setScheduleType] = useState<ScheduleType | null>(null)
+  const [excelData, setExcelData] = useState<ExcelData | null>(null)
+  const [fileName, setFileName] = useState<string>("")
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [theme, setTheme] = useState("blue")
 
   // Set theme based on selected area
   useEffect(() => {
@@ -40,30 +45,23 @@ function App() {
         case "Vigilantes":
           setTheme("red")
           break
+        case "Infraestructura":
+          setTheme("teal")
+          break
         default:
           setTheme("green")
       }
     }
   }, [selectedArea])
 
-  const handleSelectArea = (area: string) => {
-    setSelectedArea(area as AreaType)
-    setStep("upload")
-    // Reset any previous data
-    setExcelData(null)
-    setFileName(null)
-    setError(null)
-  }
-
-  const handleFileUpload = async (file: File) => {
+  const handleFileUpload = async (file: File, type: ScheduleType) => {
     setLoading(true)
     setError(null)
-    setExcelData(null)
-    setFileName(file.name)
 
     try {
-      const data = await parseExcelFile(file)
+      const data = await parseExcelFile(file, type)
       setExcelData(data)
+      setFileName(file.name)
       setStep("results")
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error al procesar el archivo")
@@ -72,31 +70,22 @@ function App() {
     }
   }
 
+  const handleSelectArea = (area: string, type: ScheduleType) => {
+    setSelectedArea(area as AreaType)
+    setScheduleType(type)
+    setStep("upload")
+  }
+
   const handleBackToWelcome = () => {
     setStep("welcome")
     setSelectedArea(null)
+    setScheduleType(null)
     setExcelData(null)
-    setFileName(null)
-    setError(null)
   }
 
   const handleBackToUpload = () => {
     setStep("upload")
     setExcelData(null)
-    setFileName(null)
-    setError(null)
-  }
-
-  const pageVariants = {
-    initial: { opacity: 0, y: 20 },
-    in: { opacity: 1, y: 0 },
-    out: { opacity: 0, y: -20 },
-  }
-
-  const pageTransition = {
-    type: "spring",
-    stiffness: 100,
-    damping: 20,
   }
 
   // Get theme-specific gradient
@@ -114,6 +103,8 @@ function App() {
         return "from-purple-800 via-purple-600 to-purple-400"
       case "red":
         return "from-red-800 via-red-600 to-red-400"
+      case "teal":
+        return "from-teal-800 via-teal-600 to-teal-400"
       default:
         return "from-green-800 via-green-600 to-green-400"
     }
@@ -134,59 +125,64 @@ function App() {
         return "purple"
       case "red":
         return "red"
+      case "teal":
+        return "teal"
       default:
         return "green"
     }
   }
 
-  // Header animation variants
-  const headerVariants = {
-    hidden: { opacity: 0 },
+  const pageVariants = {
+    initial: { opacity: 0, y: 20 },
+    in: { opacity: 1, y: 0 },
+    out: { opacity: 0, y: -20 },
+  }
+
+  const pageTransition = {
+    type: "spring",
+    stiffness: 300,
+    damping: 30,
+  }
+
+  const leafVariants = {
+    hidden: { scale: 0, rotate: -180 },
     visible: {
-      opacity: 1,
+      scale: 1,
+      rotate: 0,
       transition: {
-        duration: 0.8,
-        ease: [0.22, 1, 0.36, 1],
-        staggerChildren: 0.1,
+        type: "spring",
+        stiffness: 260,
+        damping: 20,
+      },
+    },
+    pulse: {
+      scale: [1, 1.05, 1],
+      transition: {
+        duration: 2,
+        repeat: Number.POSITIVE_INFINITY,
       },
     },
   }
 
-  // Title animation variants
   const titleVariants = {
-    hidden: { opacity: 0, y: -10 },
+    hidden: { opacity: 0, y: -20 },
     visible: {
       opacity: 1,
       y: 0,
       transition: {
+        delay: 0.3,
         duration: 0.6,
-        ease: [0.22, 1, 0.36, 1],
       },
-    },
-  }
-
-  const leafVariants = {
-    hidden: { scale: 0, opacity: 0 },
-    visible: { scale: 1, opacity: 1, transition: { duration: 0.5 } },
-    pulse: {
-      scale: [1, 1.1, 1],
-      transition: { duration: 1, repeat: Number.POSITIVE_INFINITY, repeatType: "reverse" },
     },
   }
 
   const patternVariants = {
     hidden: { opacity: 0 },
-    visible: { opacity: 1, transition: { duration: 1 } },
-  }
-
-  const floatingAnimation = {
-    y: [-5, 5, -5],
-    x: [-5, 5, -5],
-    transition: {
-      duration: 3,
-      repeat: Number.POSITIVE_INFINITY,
-      repeatType: "loop",
-      ease: "easeInOut",
+    visible: {
+      opacity: 0.1,
+      transition: {
+        duration: 1,
+      },
     },
   }
 
@@ -264,6 +260,11 @@ function App() {
                       <span className="ml-2 px-3 py-1 bg-white/20 rounded-full text-sm md:text-base font-medium backdrop-blur-sm">
                         {selectedArea}
                       </span>
+                      {scheduleType && (
+                        <span className="ml-2 px-3 py-1 bg-white/20 rounded-full text-sm md:text-base font-medium backdrop-blur-sm">
+                          {scheduleType === "formato" ? "Formato de Programación" : "Novedades"}
+                        </span>
+                      )}
                     </motion.div>
                   ) : (
                     <motion.span
@@ -318,7 +319,12 @@ function App() {
               transition={pageTransition}
               className="max-w-4xl mx-auto"
             >
-              <FileUploader onFileUpload={handleFileUpload} selectedArea={selectedArea} onBack={handleBackToWelcome} />
+              <FileUploader
+                onFileUpload={handleFileUpload}
+                selectedArea={selectedArea}
+                scheduleType={scheduleType!}
+                onBack={handleBackToWelcome}
+              />
 
               <AnimatePresence>
                 {loading && (
@@ -380,7 +386,16 @@ function App() {
               className="max-w-6xl mx-auto"
             >
               <StatsCard data={excelData} fileName={fileName} selectedArea={selectedArea} />
-              <DataTable data={excelData} selectedArea={selectedArea} onBack={handleBackToUpload} />
+              {scheduleType === "formato" ? (
+                <DataTable
+                  data={excelData}
+                  selectedArea={selectedArea}
+                  scheduleType={scheduleType}
+                  onBack={handleBackToUpload}
+                />
+              ) : (
+                <NovedadesTable data={excelData} selectedArea={selectedArea} onBack={handleBackToUpload} />
+              )}
             </motion.div>
           )}
         </AnimatePresence>

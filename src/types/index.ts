@@ -5,13 +5,15 @@ export interface ExcelData {
     time: string;
     deduction: number;
   }[];
+  novedadTypes?: string[];
+  [key: string]: any;
 }
 
 export interface FileWithPreview extends File {
   preview?: string;
 }
 
-export type AreaType = 'Operaciones' | 'Lavado' | 'Mantenimiento' | 'Remanofactura' | 'ServiciosGenerales' | 'Vigilantes'| string;
+export type AreaType = 'Operaciones' | 'Lavado' | 'Mantenimiento' | 'Remanofactura' | 'ServiciosGenerales' | 'Vigilantes'| 'Infraestructura'| string;
 
 export interface AreaOption {
   id: AreaType;
@@ -19,6 +21,10 @@ export interface AreaOption {
   icon: string;
   description: string;
   color: string;
+  hoverColor: string;
+  bgColor: string;
+  textColor: string;
+  borderColor: string;
   password?: string;
 }
 
@@ -31,4 +37,13 @@ export interface DatabaseRecord {
   Quincena: string;
   clasificacion: string;
   fecha_consulta: string;
+}
+
+export type ScheduleType = 'formato' | 'novedades';
+
+export interface ScheduleOption {
+  id: ScheduleType;
+  name: string;
+  description: string;
+  icon: string;
 }

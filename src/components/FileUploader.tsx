@@ -19,11 +19,12 @@ import {
   Info,
   XCircle,
 } from "lucide-react"
-import type { FileWithPreview, AreaType } from "../types"
+import type { FileWithPreview, AreaType, ScheduleType } from "../types"
 
 interface FileUploaderProps {
-  onFileUpload: (file: File) => void
+  onFileUpload: (file: File, type: ScheduleType) => void
   selectedArea: AreaType
+  scheduleType: ScheduleType
   onBack: () => void
 }
 
@@ -56,7 +57,7 @@ const Notification: React.FC<NotificationProps> = ({ type, message }) => (
   </motion.div>
 )
 
-const FileUploader: React.FC<FileUploaderProps> = ({ onFileUpload, selectedArea, onBack }) => {
+const FileUploader: React.FC<FileUploaderProps> = ({ onFileUpload, selectedArea, scheduleType, onBack }) => {
   const [file, setFile] = useState<FileWithPreview | null>(null)
   const [error, setError] = useState<ErrorDetails | null>(null)
   const [showErrorModal, setShowErrorModal] = useState(false)
@@ -167,10 +168,10 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileUpload, selectedArea,
       showNotification("success", "Archivo cargado correctamente")
 
       setTimeout(() => {
-        onFileUpload(selectedFile)
+        onFileUpload(selectedFile, scheduleType)
       }, 800)
     },
-    [onFileUpload],
+    [onFileUpload, scheduleType],
   )
 
   const removeFile = () => {
@@ -189,7 +190,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileUpload, selectedArea,
     setIsProcessing(true)
 
     setTimeout(() => {
-      onFileUpload(file)
+      onFileUpload(file, scheduleType)
       setIsProcessing(false)
       showNotification("success", "Archivo procesado correctamente")
     }, 1500)
@@ -773,4 +774,3 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileUpload, selectedArea,
 }
 
 export default FileUploader
-
