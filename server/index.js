@@ -32,7 +32,7 @@ const secondaryDbConfig = {
   port: 55308, 
   waitForConnections: true,
   connectionLimit: 10,
-  connectTimeout: 30000 // Aumentar tiempo de espera
+  connectTimeout: 30000 
 };
 
 const secondaryPool = mysql.createPool(secondaryDbConfig);
@@ -73,9 +73,7 @@ app.post('/api/validate-employees', async (req, res) => {
       return res.status(400).json({ error: 'Ninguna cédula válida encontrada' });
     }
 
-    // Crear placeholders para la consulta MySQL
     const placeholders = cedulas.map(() => '?').join(',');
-    // Consulta SQL CORREGIDA
     const query = `
       SELECT
         TRIM(
@@ -472,14 +470,11 @@ app.post('/api/save-novedades', async (req, res) => {
         if (isNaN(cedula)) {
           throw new Error(`CEDULA inválida: ${record.CEDULA}`);
         }
-
-        // Validar fecha programación
         const fechaProg = new Date(record.FECHA_PROGRAMACION);
         if (isNaN(fechaProg.getTime())) {
           throw new Error(`Fecha de programación inválida: ${record.FECHA_PROGRAMACION}`);
         }
 
-        // Validar fecha hora extra si existe
         let fechaHoraExtra = null;
         if (record.FECHA_HORA_EXTRA) {
           fechaHoraExtra = new Date(record.FECHA_HORA_EXTRA);
@@ -513,7 +508,6 @@ app.post('/api/save-novedades', async (req, res) => {
       }
     }
 
-    // Transacción de inserción
     console.log('[INFO] Iniciando transacción...');
     await connection.beginTransaction();
 

@@ -17,6 +17,7 @@ import {
   Building2,
   Shield,
 } from "lucide-react"
+import TermsAndConditionsDialog from "./terms-and-conditions-dialog"
 
 interface PasswordModalProps {
   isVisible: boolean
@@ -31,6 +32,8 @@ interface PasswordModalProps {
   } | null
   isAuthenticating: boolean
   error: string
+  rememberMe?: boolean
+  onRememberMeChange?: (value: boolean) => void
 }
 
 const PasswordModal: React.FC<PasswordModalProps> = ({
@@ -40,13 +43,21 @@ const PasswordModal: React.FC<PasswordModalProps> = ({
   area,
   isAuthenticating,
   error,
+  rememberMe = false,
+  onRememberMeChange = () => {},
 }) => {
   const [password, setPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
   const [capsLockOn, setCapsLockOn] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
+  const [rememberMeState, setRememberMe] = useState(false)
+  const [showTermsDialog, setShowTermsDialog] = useState(false)
+  const [hasAcceptedTerms, setHasAcceptedTerms] = useState(false)
 
-  // Focus input when modal opens
+  useEffect(() => {
+    setRememberMe(rememberMe)
+  }, [rememberMe])
+
   useEffect(() => {
     if (isVisible && inputRef.current) {
       setTimeout(() => {
@@ -55,7 +66,6 @@ const PasswordModal: React.FC<PasswordModalProps> = ({
     }
   }, [isVisible])
 
-  // Reset password when modal closes
   useEffect(() => {
     if (!isVisible) {
       setPassword("")
@@ -76,7 +86,6 @@ const PasswordModal: React.FC<PasswordModalProps> = ({
         onClose()
       }
 
-      // Submit on enter if password is not empty
       if (e.key === "Enter" && password && isVisible && !isAuthenticating) {
         onSubmit(password)
       }
@@ -100,7 +109,6 @@ const PasswordModal: React.FC<PasswordModalProps> = ({
   }, [isVisible, onClose, onSubmit, password, isAuthenticating])
 
   useEffect(() => {
-    // Disable body scrolling when modal is visible
     if (isVisible) {
       document.body.style.overflow = "hidden"
     } else {
@@ -195,7 +203,31 @@ const PasswordModal: React.FC<PasswordModalProps> = ({
     }
   }
 
-  // Animation variants
+  const handleRememberMeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newValue = e.target.checked
+
+    if (newValue && !hasAcceptedTerms) {
+    
+      setShowTermsDialog(true)
+    } else {
+      setRememberMe(newValue)
+      onRememberMeChange(newValue)
+    }
+  }
+
+  const handleAcceptTerms = () => {
+    setHasAcceptedTerms(true)
+    setShowTermsDialog(false)
+    setRememberMe(true)
+    onRememberMeChange(true)
+  }
+
+  const handleDeclineTerms = () => {
+    setShowTermsDialog(false)
+    setRememberMe(false)
+    onRememberMeChange(false)
+  }
+
   const backdropVariants = {
     hidden: { opacity: 0 },
     visible: {
@@ -237,143 +269,162 @@ const PasswordModal: React.FC<PasswordModalProps> = ({
   }
 
   return (
-    <AnimatePresence>
-      {isVisible && (
-        <motion.div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4"
-          initial="hidden"
-          animate="visible"
-          exit="exit"
-          variants={backdropVariants}
-        >
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-md" onClick={onClose} />
-
+    <>
+      <AnimatePresence>
+        {isVisible && (
           <motion.div
-            className="w-full max-w-md overflow-hidden rounded-2xl relative z-10 bg-white"
-            variants={modalVariants}
-            onClick={(e) => e.stopPropagation()}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+            variants={backdropVariants}
           >
-            {/* Header section */}
-            <div className={`bg-gradient-to-r ${getAreaGradient()} p-6 sm:p-8 relative`}>
-              <button
-                onClick={onClose}
-                className="absolute top-4 right-4 text-white/80 hover:text-white transition-colors rounded-full p-1 hover:bg-white/10"
-                aria-label="Cerrar"
-              >
-                <X size={20} />
-              </button>
+            <div className="absolute inset-0 bg-black/60 backdrop-blur-md" onClick={onClose} />
 
-              <div className="flex items-center">
-                <div className="bg-white/20 w-16 h-16 rounded-full flex items-center justify-center mr-4 backdrop-blur-sm border border-white/30">
-                  {getAreaIcon(area?.icon || "", 32, "text-white")}
-                </div>
+            <motion.div
+              className="w-full max-w-md overflow-hidden rounded-2xl relative z-10 bg-white"
+              variants={modalVariants}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className={`bg-gradient-to-r ${getAreaGradient()} p-6 sm:p-8 relative`}>
+                <button
+                  onClick={onClose}
+                  className="absolute top-4 right-4 text-white/80 hover:text-white transition-colors rounded-full p-1 hover:bg-white/10"
+                  aria-label="Cerrar"
+                >
+                  <X size={20} />
+                </button>
 
-                <div className="text-white">
-                  <h3 className="text-2xl font-bold" id="modal-title">
-                    {area?.name}
-                  </h3>
-                  <p className="text-white/80">{area?.description}</p>
-                </div>
-              </div>
-
-              <div className="mt-6 bg-white/10 backdrop-blur-sm rounded-lg p-4 border border-white/20">
-                <div className="flex items-center text-white">
-                  <Lock size={18} className="mr-2" />
-                  <span>Área protegida - Ingrese su contraseña</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Form section */}
-            <div className="p-6 sm:p-8">
-              <form onSubmit={handleSubmit}>
-                <div className="mb-6">
-                  <div className="relative">
-                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">
-                      <Lock size={18} />
-                    </div>
-
-                    <input
-                      ref={inputRef}
-                      type={showPassword ? "text" : "password"}
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      className={`w-full pl-12 pr-12 py-4 border ${
-                        error ? "border-red-300" : "border-gray-200"
-                      } rounded-xl focus:outline-none focus:ring-2 ${getAreaRingColor()} transition-all duration-300 text-lg bg-gray-50`}
-                      placeholder="••••••••••••"
-                      autoComplete="current-password"
-                    />
-
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors p-2"
-                      aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
-                    >
-                      {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                    </button>
+                <div className="flex items-center">
+                  <div className="bg-white/20 w-16 h-16 rounded-full flex items-center justify-center mr-4 backdrop-blur-sm border border-white/30">
+                    {getAreaIcon(area?.icon || "", 32, "text-white")}
                   </div>
 
-                  {capsLockOn && (
-                    <div className="mt-2 flex items-center text-amber-600 text-sm">
-                      <AlertTriangle size={16} className="mr-1" />
-                      <span>Bloq Mayús está activado</span>
-                    </div>
-                  )}
-
-                  {error && (
-                    <div className="mt-2 flex items-center text-red-600 text-sm">
-                      <AlertTriangle size={16} className="mr-1" />
-                      <span>{error}</span>
-                    </div>
-                  )}
+                  <div className="text-white">
+                    <h3 className="text-2xl font-bold" id="modal-title">
+                      {area?.name}
+                    </h3>
+                    <p className="text-white/80">{area?.description}</p>
+                  </div>
                 </div>
 
-                <div className="flex justify-end">
-                  <button
-                    type="submit"
-                    disabled={isAuthenticating || !password}
-                    className={`w-full px-6 py-3 ${getAreaColor()} text-white rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center`}
-                  >
-                    {isAuthenticating ? (
-                      <>
-                        <svg
-                          className="animate-spin -ml-1 mr-2 h-5 w-5 text-white"
-                          xmlns="http://www.w3.org/2000/svg"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                        >
-                          <circle
-                            className="opacity-25"
-                            cx="12"
-                            cy="12"
-                            r="10"
-                            stroke="currentColor"
-                            strokeWidth="4"
-                          ></circle>
-                          <path
-                            className="opacity-75"
-                            fill="currentColor"
-                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                          ></path>
-                        </svg>
-                        Verificando...
-                      </>
-                    ) : (
-                      <>
-                        Acceder
-                        <ArrowRight size={18} className="ml-2" />
-                      </>
+                <div className="mt-6 bg-white/10 backdrop-blur-sm rounded-lg p-4 border border-white/20">
+                  <div className="flex items-center text-white">
+                    <Lock size={18} className="mr-2" />
+                    <span>Área protegida - Ingrese su contraseña</span>
+                  </div>
+                </div>
+              </div>
+              <div className="p-6 sm:p-8">
+                <form onSubmit={handleSubmit}>
+                  <div className="mb-6">
+                    <div className="relative">
+                      <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">
+                        <Lock size={18} />
+                      </div>
+
+                      <input
+                        ref={inputRef}
+                        type={showPassword ? "text" : "password"}
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        className={`w-full pl-12 pr-12 py-4 border ${
+                          error ? "border-red-300" : "border-gray-200"
+                        } rounded-xl focus:outline-none focus:ring-2 ${getAreaRingColor()} transition-all duration-300 text-lg bg-gray-50`}
+                        placeholder="••••••••••••"
+                        autoComplete="current-password"
+                      />
+
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors p-2"
+                        aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+                      >
+                        {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                      </button>
+                    </div>
+
+                    {capsLockOn && (
+                      <div className="mt-2 flex items-center text-amber-600 text-sm">
+                        <AlertTriangle size={16} className="mr-1" />
+                        <span>Bloq Mayús está activado</span>
+                      </div>
                     )}
-                  </button>
-                </div>
-              </form>
-            </div>
+
+                    {error && (
+                      <div className="mt-2 flex items-center text-red-600 text-sm">
+                        <AlertTriangle size={16} className="mr-1" />
+                        <span>{error}</span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="mb-4 flex items-center">
+                    <input
+                      type="checkbox"
+                      id="remember-me"
+                      checked={rememberMeState}
+                      onChange={handleRememberMeChange}
+                      className={`h-4 w-4 rounded border-gray-300 text-${area?.color || "green"}-600 focus:ring-${area?.color || "green"}-500`}
+                    />
+                    <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-700">
+                      Recordar mi acceso permanentemente
+                    </label>
+                  </div>
+
+                  <div className="flex justify-end">
+                    <button
+                      type="submit"
+                      disabled={isAuthenticating || !password}
+                      className={`w-full px-6 py-3 ${getAreaColor()} text-white rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center`}
+                    >
+                      {isAuthenticating ? (
+                        <>
+                          <svg
+                            className="animate-spin -ml-1 mr-2 h-5 w-5 text-white"
+                            xmlns="http://www.w3.org/2000/svg"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                          >
+                            <circle
+                              className="opacity-25"
+                              cx="12"
+                              cy="12"
+                              r="10"
+                              stroke="currentColor"
+                              strokeWidth="4"
+                            ></circle>
+                            <path
+                              className="opacity-75"
+                              fill="currentColor"
+                              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                            ></path>
+                          </svg>
+                          Verificando...
+                        </>
+                      ) : (
+                        <>
+                          Acceder
+                          <ArrowRight size={18} className="ml-2" />
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </motion.div>
           </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>
+        )}
+      </AnimatePresence>
+
+      {/* Diálogo de términos y condiciones */}
+      <TermsAndConditionsDialog
+        isVisible={showTermsDialog}
+        onClose={() => setShowTermsDialog(false)}
+        onAccept={handleAcceptTerms}
+        onDecline={handleDeclineTerms}
+      />
+    </>
   )
 }
 

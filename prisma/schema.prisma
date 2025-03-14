@@ -1,0 +1,44 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model ProgramacionTurnos {
+  id                   Int      @id @default(autoincrement())
+  CEDULA               BigInt
+  Fecha_programacion   DateTime
+  Horario_programacion String
+  Area                 String
+  Tiempo_a_descontar   Float    @default(0)
+  Quincena             String
+  clasificacion        String
+  fecha_consulta       DateTime
+  created_at           DateTime @default(now())
+}
+
+model NovedadesProgramacionEmpleados {
+  FECHA_PROGRAMACION DateTime
+  CEDULA             Int
+  TIPO_NOVEDAD       String
+  FECHA_HORA_EXTRA   DateTime
+  HORA_INICIO_FIN    String
+  MOTIVO             String
+  CEDULA_AUTORIZA    Int
+  AREA               String
+  QUINCENA           String
+  TIEMPO_DESCONTAR   Float
+  FECHA_CONSULTA     DateTime
+
+  @@id([CEDULA, FECHA_PROGRAMACION]) 
+}
+
+model PersonasValidas {
+  F200_NIT           String  @id @unique
+  f200_razon_social  String
+  C0763_DESCRIPCION  String
+  C0550_FECHA_INGRESO DateTime
+}
