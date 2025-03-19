@@ -799,7 +799,7 @@ const DataTable: React.FC<DataTableProps> = ({ data, selectedArea, onBack }) => 
 
       try {
         const result = await axios.post(
-          "http://localhost:3307/api/save-schedule",
+          "https://programacion-areas-khbj.onrender.com/api/save-schedule",
           {
             records: localRecords,
             area: selectedArea,
