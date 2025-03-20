@@ -17,19 +17,19 @@ Bienvenido al **Sistema Alimentador Oriental 6**, una plataforma moderna para ge
 ## 📸 Capturas de Pantalla
 
 - Inicio previo
-![alt text](image.png)
+![image](https://github.com/user-attachments/assets/c0a521cf-f92b-4c9d-904b-34294020bf84)
 
 - Áreas
-![alt text](image-1.png)
+![image](https://github.com/user-attachments/assets/db4dd15c-c9b2-47ab-b599-6f2abe1c200c)
 
 - Login
-![alt text](image-2.png)
+![image](https://github.com/user-attachments/assets/d4209a29-c6e0-408b-8204-bdc345b9c6be)
 
 - Cargar programación
-![alt text](image-3.png)
+![image](https://github.com/user-attachments/assets/9ed37a8d-28fb-458a-b1f1-97650ddbf439)
 
 - Visualización de la información
-![alt text](image-4.png)
+![image](https://github.com/user-attachments/assets/14d2a50d-515d-42cc-bd8d-d0a2b5ca8f3a)
 
 ---
 
